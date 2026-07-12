@@ -36,3 +36,15 @@ DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned lon
     }
     return result;
 }
+
+float applyAirTempCalibration(float rawTemp, float offsetC) {
+    return rawTemp + offsetC;
+}
+
+bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis) {
+    return airTemp < (targetAirTemp - hysteresis);
+}
+
+bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis) {
+    return airTemp > (targetAirTemp + hysteresis);
+}

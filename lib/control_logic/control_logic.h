@@ -20,3 +20,8 @@ struct DutyLimits {
 
 unsigned long resetLoadOnLimit(unsigned long baseDelayMs);
 DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned long currentLoadOnLimitMs, unsigned long baseDelayMs);
+
+// Вспомогательный нагреватель: калибровка + гистерезис (CLAUDE.md §3.2)
+float applyAirTempCalibration(float rawTemp, float offsetC);
+bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis);
+bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis);

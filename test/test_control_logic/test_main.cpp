@@ -71,6 +71,26 @@ void test_adaptDutyLimits_neutral_zone_keeps_on_limit(void) {
     TEST_ASSERT_EQUAL_UINT32(10000UL, result.loadOffLimit);
 }
 
+void test_applyAirTempCalibration_subtracts_offset(void) {
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 4.2f, applyAirTempCalibration(5.2f, -1.0f));
+}
+
+void test_shouldAuxHeaterTurnOn_below_lower_hysteresis_returns_true(void) {
+    TEST_ASSERT_TRUE(shouldAuxHeaterTurnOn(8.9f, 10.0f, 1.0f));
+}
+
+void test_shouldAuxHeaterTurnOn_at_lower_hysteresis_returns_false(void) {
+    TEST_ASSERT_FALSE(shouldAuxHeaterTurnOn(9.0f, 10.0f, 1.0f));
+}
+
+void test_shouldAuxHeaterTurnOff_above_upper_hysteresis_returns_true(void) {
+    TEST_ASSERT_TRUE(shouldAuxHeaterTurnOff(11.1f, 10.0f, 1.0f));
+}
+
+void test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false(void) {
+    TEST_ASSERT_FALSE(shouldAuxHeaterTurnOff(11.0f, 10.0f, 1.0f));
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_shouldStartHeating_below_lower_hysteresis_returns_true);
@@ -88,5 +108,10 @@ int main(int argc, char **argv) {
     RUN_TEST(test_adaptDutyLimits_hot_clamps_at_floor);
     RUN_TEST(test_adaptDutyLimits_cold_increases_on_limit);
     RUN_TEST(test_adaptDutyLimits_neutral_zone_keeps_on_limit);
+    RUN_TEST(test_applyAirTempCalibration_subtracts_offset);
+    RUN_TEST(test_shouldAuxHeaterTurnOn_below_lower_hysteresis_returns_true);
+    RUN_TEST(test_shouldAuxHeaterTurnOn_at_lower_hysteresis_returns_false);
+    RUN_TEST(test_shouldAuxHeaterTurnOff_above_upper_hysteresis_returns_true);
+    RUN_TEST(test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false);
     return UNITY_END();
 }
