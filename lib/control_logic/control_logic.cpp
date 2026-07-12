@@ -87,3 +87,11 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
     out.fanOnSince = fanOnSince;
     return out;
 }
+
+bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned long nowMillis, unsigned long watchdogTimeoutMs) {
+    return (nowMillis - lastFullyConnectedMillis) >= watchdogTimeoutMs;
+}
+
+bool isValidSensorTempDiff(float diff) {
+    return diff >= SENSOR_TEMP_DIFF_MIN && diff <= SENSOR_TEMP_DIFF_MAX;
+}

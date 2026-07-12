@@ -44,3 +44,9 @@ struct RadiatorDecision {
 };
 
 RadiatorDecision evaluateRadiator(const RadiatorInput& input);
+
+// Watchdog связи WiFi+MQTT (CLAUDE.md §3.5)
+bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned long nowMillis, unsigned long watchdogTimeoutMs);
+
+// Валидация входящей MQTT-команды SensorTempDiff (CLAUDE.md §4)
+bool isValidSensorTempDiff(float diff);

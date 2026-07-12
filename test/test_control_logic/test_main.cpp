@@ -174,6 +174,31 @@ void test_evaluateRadiator_sensor_failure_forces_shutdown(void) {
     TEST_ASSERT_TRUE(out.fanOn);
 }
 
+void test_shouldRestartForWatchdog_below_timeout_returns_false(void) {
+    TEST_ASSERT_FALSE(shouldRestartForWatchdog(0UL, 299999UL, 300000UL));
+}
+
+void test_shouldRestartForWatchdog_at_timeout_returns_true(void) {
+    TEST_ASSERT_TRUE(shouldRestartForWatchdog(0UL, 300000UL, 300000UL));
+}
+
+void test_isValidSensorTempDiff_in_range_returns_true(void) {
+    TEST_ASSERT_TRUE(isValidSensorTempDiff(15.0f));
+}
+
+void test_isValidSensorTempDiff_below_min_returns_false(void) {
+    TEST_ASSERT_FALSE(isValidSensorTempDiff(4.9f));
+}
+
+void test_isValidSensorTempDiff_above_max_returns_false(void) {
+    TEST_ASSERT_FALSE(isValidSensorTempDiff(50.1f));
+}
+
+void test_isValidSensorTempDiff_at_bounds_returns_true(void) {
+    TEST_ASSERT_TRUE(isValidSensorTempDiff(5.0f));
+    TEST_ASSERT_TRUE(isValidSensorTempDiff(50.0f));
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_shouldStartHeating_below_lower_hysteresis_returns_true);
@@ -205,5 +230,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_evaluateRadiator_recovers_below_15c);
     RUN_TEST(test_evaluateRadiator_alarm_persists_above_recovery_threshold);
     RUN_TEST(test_evaluateRadiator_sensor_failure_forces_shutdown);
+    RUN_TEST(test_shouldRestartForWatchdog_below_timeout_returns_false);
+    RUN_TEST(test_shouldRestartForWatchdog_at_timeout_returns_true);
+    RUN_TEST(test_isValidSensorTempDiff_in_range_returns_true);
+    RUN_TEST(test_isValidSensorTempDiff_below_min_returns_false);
+    RUN_TEST(test_isValidSensorTempDiff_above_max_returns_false);
+    RUN_TEST(test_isValidSensorTempDiff_at_bounds_returns_true);
     return UNITY_END();
 }
