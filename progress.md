@@ -871,7 +871,7 @@ EOF
 - Consumes: `RadiatorAlarmState` enum (Task 1).
 - Produces: `struct DeviceStatus`, `void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferSize)` — used by `main.cpp` Task 15.
 
-- [ ] **Step 1: Write the failing test — append to `test/test_control_logic/test_main.cpp`** (add `#include <ArduinoJson.h>` to the top of the file)
+- [x] **Step 1: Write the failing test — append to `test/test_control_logic/test_main.cpp`** (add `#include <ArduinoJson.h>` to the top of the file)
 
 ```cpp
 void test_buildStatusJson_roundtrips_all_fields(void) {
@@ -926,12 +926,12 @@ void test_buildStatusJson_reports_fan_fault_alarm(void) {
 
 Add matching `RUN_TEST(...)` lines to `main()`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — `undefined reference to 'buildStatusJson(DeviceStatus const&, char*, unsigned long)'`
 
-- [ ] **Step 3: Declare in `control_logic.h`** (add `#include <stddef.h>` near the top, then append)
+- [x] **Step 3: Declare in `control_logic.h`** (add `#include <stddef.h>` near the top, then append)
 
 ```cpp
 // Сборка JSON-статуса (CLAUDE.md §4)
@@ -965,7 +965,7 @@ struct DeviceStatus {
 void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferSize);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (add `#include <ArduinoJson.h>` to the top of the file, then append)
+- [x] **Step 4: Implement in `control_logic.cpp`** (add `#include <ArduinoJson.h>` to the top of the file, then append)
 
 ```cpp
 static const char* radiatorAlarmToString(RadiatorAlarmState state) {
@@ -1008,12 +1008,12 @@ void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferS
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `37 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -1027,6 +1027,11 @@ WiFi/MQTT — CLAUDE.md §4. Все чистые функции control_logic г
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `363e176`. 37/37 тестов PASSED. API ArduinoJson v7
+(`JsonDocument`, `serializeJson`, `deserializeJson`) сверен через context7 —
+совпадает с планом без изменений. Все чистые функции `control_logic`
+(Tasks 3-8) готовы; следующий шаг — обвязка `main.cpp` (Task 9+).
 
 ---
 
