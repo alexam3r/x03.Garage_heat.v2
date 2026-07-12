@@ -91,6 +91,89 @@ void test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false(void) {
     TEST_ASSERT_FALSE(shouldAuxHeaterTurnOff(11.0f, 10.0f, 1.0f));
 }
 
+static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now,
+                                        unsigned long fanOnSince, bool fanWasOn,
+                                        RadiatorAlarmState prevAlarm) {
+    RadiatorInput in;
+    in.radiatorTemp = temp;
+    in.sensorValid = valid;
+    in.nowMillis = now;
+    in.fanOnSince = fanOnSince;
+    in.fanWasOn = fanWasOn;
+    in.previousAlarm = prevAlarm;
+    return in;
+}
+
+void test_evaluateRadiator_cold_normal_fan_off(void) {
+    RadiatorInput in = makeRadiatorInput(20.0f, true, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_FALSE(out.fanOn);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::NORMAL, (int)out.alarmState);
+    TEST_ASSERT_FALSE(out.forceLoadsOff);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOnSince);
+}
+
+void test_evaluateRadiator_crosses_fan_on_threshold_records_fanOnSince(void) {
+    RadiatorInput in = makeRadiatorInput(31.0f, true, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_TRUE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(100000UL, out.fanOnSince);
+    TEST_ASSERT_FALSE(out.forceLoadsOff);
+}
+
+void test_evaluateRadiator_cools_below_threshold_resets_fanOnSince(void) {
+    RadiatorInput in = makeRadiatorInput(29.0f, true, 110000UL, 100000UL, true, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_FALSE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOnSince);
+}
+
+void test_evaluateRadiator_fan_fault_after_min_runtime(void) {
+    // fan on since 100000, now 165000 => 65s elapsed >= 60s minimum, temp still >= 33
+    RadiatorInput in = makeRadiatorInput(33.0f, true, 165000UL, 100000UL, true, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::FAN_FAULT, (int)out.alarmState);
+    TEST_ASSERT_TRUE(out.forceLoadsOff);
+}
+
+void test_evaluateRadiator_no_fault_before_min_runtime(void) {
+    // only 30s elapsed, below the 60s minimum runtime
+    RadiatorInput in = makeRadiatorInput(33.0f, true, 130000UL, 100000UL, true, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::NORMAL, (int)out.alarmState);
+    TEST_ASSERT_FALSE(out.forceLoadsOff);
+}
+
+void test_evaluateRadiator_critical_overtemp_forces_shutdown(void) {
+    RadiatorInput in = makeRadiatorInput(36.0f, true, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::OVERTEMP, (int)out.alarmState);
+    TEST_ASSERT_TRUE(out.forceLoadsOff);
+}
+
+void test_evaluateRadiator_recovers_below_15c(void) {
+    RadiatorInput in = makeRadiatorInput(14.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::OVERTEMP);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::NORMAL, (int)out.alarmState);
+    TEST_ASSERT_FALSE(out.forceLoadsOff);
+    TEST_ASSERT_FALSE(out.fanOn);
+}
+
+void test_evaluateRadiator_alarm_persists_above_recovery_threshold(void) {
+    RadiatorInput in = makeRadiatorInput(25.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::FAN_FAULT);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::FAN_FAULT, (int)out.alarmState);
+    TEST_ASSERT_TRUE(out.forceLoadsOff);
+}
+
+void test_evaluateRadiator_sensor_failure_forces_shutdown(void) {
+    RadiatorInput in = makeRadiatorInput(0.0f, false, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::OVERTEMP, (int)out.alarmState);
+    TEST_ASSERT_TRUE(out.forceLoadsOff);
+    TEST_ASSERT_TRUE(out.fanOn);
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_shouldStartHeating_below_lower_hysteresis_returns_true);
@@ -113,5 +196,14 @@ int main(int argc, char **argv) {
     RUN_TEST(test_shouldAuxHeaterTurnOn_at_lower_hysteresis_returns_false);
     RUN_TEST(test_shouldAuxHeaterTurnOff_above_upper_hysteresis_returns_true);
     RUN_TEST(test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false);
+    RUN_TEST(test_evaluateRadiator_cold_normal_fan_off);
+    RUN_TEST(test_evaluateRadiator_crosses_fan_on_threshold_records_fanOnSince);
+    RUN_TEST(test_evaluateRadiator_cools_below_threshold_resets_fanOnSince);
+    RUN_TEST(test_evaluateRadiator_fan_fault_after_min_runtime);
+    RUN_TEST(test_evaluateRadiator_no_fault_before_min_runtime);
+    RUN_TEST(test_evaluateRadiator_critical_overtemp_forces_shutdown);
+    RUN_TEST(test_evaluateRadiator_recovers_below_15c);
+    RUN_TEST(test_evaluateRadiator_alarm_persists_above_recovery_threshold);
+    RUN_TEST(test_evaluateRadiator_sensor_failure_forces_shutdown);
     return UNITY_END();
 }

@@ -25,3 +25,22 @@ DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned lon
 float applyAirTempCalibration(float rawTemp, float offsetC);
 bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis);
 bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis);
+
+// Радиатор SSR: эскалация перегрева/отказа вентилятора (CLAUDE.md §3.3)
+struct RadiatorInput {
+    float radiatorTemp;
+    bool sensorValid;
+    unsigned long nowMillis;
+    unsigned long fanOnSince;      // 0 = вентилятор сейчас не включён
+    bool fanWasOn;                 // состояние D8 до этого вызова
+    RadiatorAlarmState previousAlarm;
+};
+
+struct RadiatorDecision {
+    bool fanOn;
+    RadiatorAlarmState alarmState;
+    bool forceLoadsOff;            // true -> main.cpp обязан выключить D5/D6/D7
+    unsigned long fanOnSince;      // обновлённое значение, сохранить для следующего вызова
+};
+
+RadiatorDecision evaluateRadiator(const RadiatorInput& input);

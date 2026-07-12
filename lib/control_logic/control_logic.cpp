@@ -1,4 +1,5 @@
 #include "control_logic.h"
+#include "config.h"
 
 bool shouldStartHeating(float targetSensorReading, float targetSetpoint, float hysteresis) {
     return targetSensorReading < (targetSetpoint - hysteresis);
@@ -47,4 +48,42 @@ bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis)
 
 bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis) {
     return airTemp > (targetAirTemp + hysteresis);
+}
+
+RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
+    RadiatorDecision out;
+
+    if (!in.sensorValid) {
+        out.fanOn = true;
+        out.alarmState = RadiatorAlarmState::OVERTEMP;
+        out.forceLoadsOff = true;
+        out.fanOnSince = 0UL;
+        return out;
+    }
+
+    RadiatorAlarmState alarm = in.previousAlarm;
+    if (alarm != RadiatorAlarmState::NORMAL && in.radiatorTemp < RADIATOR_RECOVERY_TEMP) {
+        alarm = RadiatorAlarmState::NORMAL;
+    }
+
+    bool fanShouldBeOn = in.radiatorTemp >= RADIATOR_FAN_ON_TEMP;
+    unsigned long fanOnSince = in.fanOnSince;
+    if (fanShouldBeOn && !in.fanWasOn) {
+        fanOnSince = in.nowMillis;
+    } else if (!fanShouldBeOn) {
+        fanOnSince = 0UL;
+    }
+
+    if (in.radiatorTemp >= RADIATOR_CRITICAL_TEMP) {
+        alarm = RadiatorAlarmState::OVERTEMP;
+    } else if (in.radiatorTemp >= RADIATOR_FAN_FAULT_TEMP && fanOnSince != 0UL &&
+               (in.nowMillis - fanOnSince) >= RADIATOR_FAN_MIN_RUNTIME_MS) {
+        alarm = RadiatorAlarmState::FAN_FAULT;
+    }
+
+    out.fanOn = fanShouldBeOn;
+    out.alarmState = alarm;
+    out.forceLoadsOff = (alarm != RadiatorAlarmState::NORMAL);
+    out.fanOnSince = fanOnSince;
+    return out;
 }
