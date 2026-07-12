@@ -223,7 +223,7 @@ Used a direct compiler check instead: `g++ -std=gnu++17 -fsyntax-only -x c++ inc
 Actual: no errors (only a benign `#pragma once in main file` warning) — confirms
 `config.h` contains only preprocessor macros with no Arduino-core dependency.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add include/config.h
@@ -235,6 +235,8 @@ MQTT-топики и ROM-заглушки трёх DS18b20 — согласно 
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `43b7d54`.
 
 ---
 
@@ -249,7 +251,7 @@ EOF
 - Consumes: nothing.
 - Produces: `bool shouldStartHeating(float reading, float target, float hysteresis)`, `bool shouldStopHeating(float reading, float target, float hysteresis)` — used by `main.cpp` Task 11.
 
-- [ ] **Step 1: Write the failing test — create `test/test_control_logic/test_main.cpp`**
+- [x] **Step 1: Write the failing test — create `test/test_control_logic/test_main.cpp`**
 
 ```cpp
 #include <unity.h>
@@ -284,12 +286,12 @@ int main(int argc, char **argv) {
 }
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — linker error `undefined reference to 'shouldStartHeating(float, float, float)'`
 
-- [ ] **Step 3: Declare the functions in `control_logic.h`** (append after the enums)
+- [x] **Step 3: Declare the functions in `control_logic.h`** (append after the enums)
 
 ```cpp
 // Тепловая пушка: гистерезис TARGET (CLAUDE.md §3.1)
@@ -297,7 +299,7 @@ bool shouldStartHeating(float targetSensorReading, float targetSetpoint, float h
 bool shouldStopHeating(float targetSensorReading, float targetSetpoint, float hysteresis);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (append)
+- [x] **Step 4: Implement in `control_logic.cpp`** (append)
 
 ```cpp
 bool shouldStartHeating(float targetSensorReading, float targetSetpoint, float hysteresis) {
@@ -309,12 +311,12 @@ bool shouldStopHeating(float targetSensorReading, float targetSetpoint, float hy
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `4 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -326,6 +328,8 @@ CLAUDE.md §3.1. Первый нативный TDD-цикл на platform=native
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `f88b6d6`. 4/4 теста PASSED.
 
 ---
 
@@ -340,7 +344,7 @@ EOF
 - Consumes: nothing.
 - Produces: `unsigned long selectFanCoolerDelay(float outdoorTemp)`, `unsigned long resetLoadOnLimit(unsigned long baseDelayMs)`, `struct DutyLimits { unsigned long loadOnLimit; unsigned long loadOffLimit; }`, `DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned long currentLoadOnLimitMs, unsigned long baseDelayMs)` — used by `main.cpp` Tasks 10/11.
 
-- [ ] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
+- [x] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
 
 ```cpp
 void test_selectFanCoolerDelay_above_zero_returns_20000(void) {
@@ -397,12 +401,12 @@ void test_adaptDutyLimits_neutral_zone_keeps_on_limit(void) {
 
 Add the matching `RUN_TEST(...)` lines to `main()` in the same file, before `return UNITY_END();`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — `undefined reference to 'selectFanCoolerDelay(float)'`
 
-- [ ] **Step 3: Declare in `control_logic.h`** (append)
+- [x] **Step 3: Declare in `control_logic.h`** (append)
 
 ```cpp
 // fanCoolerDelay по уличной температуре (CLAUDE.md §3.1, таблица)
@@ -418,7 +422,7 @@ unsigned long resetLoadOnLimit(unsigned long baseDelayMs);
 DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned long currentLoadOnLimitMs, unsigned long baseDelayMs);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (append)
+- [x] **Step 4: Implement in `control_logic.cpp`** (append)
 
 ```cpp
 unsigned long selectFanCoolerDelay(float outdoorTemp) {
@@ -451,12 +455,12 @@ DutyLimits adaptDutyLimits(float blownAirTemp, float sensorMaxTemp, unsigned lon
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `15 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -469,6 +473,8 @@ git commit -m "$(cat <<'EOF'
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `c272ed9`. 15/15 тестов PASSED.
 
 ---
 
@@ -483,7 +489,7 @@ EOF
 - Consumes: nothing.
 - Produces: `float applyAirTempCalibration(float rawTemp, float offsetC)`, `bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis)`, `bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis)` — used by `main.cpp` Tasks 10/12.
 
-- [ ] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
+- [x] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
 
 ```cpp
 void test_applyAirTempCalibration_subtracts_offset(void) {
@@ -509,12 +515,12 @@ void test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false(void) {
 
 Add matching `RUN_TEST(...)` lines to `main()`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — `undefined reference to 'applyAirTempCalibration(float, float)'`
 
-- [ ] **Step 3: Declare in `control_logic.h`** (append)
+- [x] **Step 3: Declare in `control_logic.h`** (append)
 
 ```cpp
 // Вспомогательный нагреватель: калибровка + гистерезис (CLAUDE.md §3.2)
@@ -523,7 +529,7 @@ bool shouldAuxHeaterTurnOn(float airTemp, float targetAirTemp, float hysteresis)
 bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (append)
+- [x] **Step 4: Implement in `control_logic.cpp`** (append)
 
 ```cpp
 float applyAirTempCalibration(float rawTemp, float offsetC) {
@@ -539,12 +545,12 @@ bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `20 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -556,6 +562,8 @@ applyAirTempCalibration (-1°C), shouldAuxHeaterTurnOn/Off (±1°C
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `6b8596a`. 20/20 тестов PASSED.
 
 ---
 
@@ -572,7 +580,7 @@ EOF
 
 This is the most safety-critical function in the firmware — it decides when to force-shutdown D5/D6/D7. Test every branch from CLAUDE.md §3.3 individually.
 
-- [ ] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
+- [x] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
 
 ```cpp
 static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now,
@@ -661,12 +669,12 @@ void test_evaluateRadiator_sensor_failure_forces_shutdown(void) {
 
 Add matching `RUN_TEST(...)` lines to `main()`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — `undefined reference to 'evaluateRadiator(RadiatorInput const&)'`
 
-- [ ] **Step 3: Declare in `control_logic.h`** (append)
+- [x] **Step 3: Declare in `control_logic.h`** (append)
 
 ```cpp
 // Радиатор SSR: эскалация перегрева/отказа вентилятора (CLAUDE.md §3.3)
@@ -689,7 +697,7 @@ struct RadiatorDecision {
 RadiatorDecision evaluateRadiator(const RadiatorInput& input);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (append; needs `#include "config.h"` added to the top of the file for the radiator threshold constants)
+- [x] **Step 4: Implement in `control_logic.cpp`** (append; needs `#include "config.h"` added to the top of the file for the radiator threshold constants)
 
 ```cpp
 #include "config.h"
@@ -733,12 +741,12 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `29 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -751,6 +759,11 @@ CLAUDE.md §3.3. Девять сценариев покрыты нативным
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `d644a07`. 29/29 тестов PASSED. Заодно добавлен
+`-Iinclude` в общие `build_flags` (platformio.ini) — без него строгий LDF
+PlatformIO не резолвил `include/config.h` из `lib/control_logic` на
+`platform=native`.
 
 ---
 
@@ -765,7 +778,7 @@ EOF
 - Consumes: nothing.
 - Produces: `bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned long nowMillis, unsigned long watchdogTimeoutMs)`, `bool isValidSensorTempDiff(float diff)` — used by `main.cpp` Tasks 14/16.
 
-- [ ] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
+- [x] **Step 1: Write the failing tests — append to `test/test_control_logic/test_main.cpp`**
 
 ```cpp
 void test_shouldRestartForWatchdog_below_timeout_returns_false(void) {
@@ -796,12 +809,12 @@ void test_isValidSensorTempDiff_at_bounds_returns_true(void) {
 
 Add matching `RUN_TEST(...)` lines to `main()`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pio test -e native`
 Expected: build FAILS — `undefined reference to 'shouldRestartForWatchdog(unsigned long, unsigned long, unsigned long)'`
 
-- [ ] **Step 3: Declare in `control_logic.h`** (append)
+- [x] **Step 3: Declare in `control_logic.h`** (append)
 
 ```cpp
 // Watchdog связи WiFi+MQTT (CLAUDE.md §3.5)
@@ -811,7 +824,7 @@ bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned l
 bool isValidSensorTempDiff(float diff);
 ```
 
-- [ ] **Step 4: Implement in `control_logic.cpp`** (append)
+- [x] **Step 4: Implement in `control_logic.cpp`** (append)
 
 ```cpp
 bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned long nowMillis, unsigned long watchdogTimeoutMs) {
@@ -823,12 +836,12 @@ bool isValidSensorTempDiff(float diff) {
 }
 ```
 
-- [ ] **Step 5: Run test to verify it passes**
+- [x] **Step 5: Run test to verify it passes**
 
 Run: `pio test -e native`
 Expected: `35 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/control_logic test/test_control_logic
@@ -840,6 +853,10 @@ shouldRestartForWatchdog (5 минут без WiFi+MQTT), isValidSensorTempDiff
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `7c5ebae`. 35/35 тестов PASSED. Все чистые
+функции CLAUDE.md §3 (гистерезис пушки, duty-цикл, вспомогательный
+нагреватель, эскалация радиатора, watchdog) реализованы и покрыты тестами.
 
 ---
 
