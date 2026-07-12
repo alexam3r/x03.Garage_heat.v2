@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <ArduinoJson.h>
 #include "control_logic.h"
 
 void setUp(void) {}
@@ -199,6 +200,55 @@ void test_isValidSensorTempDiff_at_bounds_returns_true(void) {
     TEST_ASSERT_TRUE(isValidSensorTempDiff(50.0f));
 }
 
+void test_buildStatusJson_roundtrips_all_fields(void) {
+    DeviceStatus status;
+    status.blownAirTemp = 18.5f; status.blownAirValid = true;
+    status.targetTemp = 4.8f;    status.targetValid = true;
+    status.infoTemp = 0.0f;      status.infoValid = false;
+    status.outdoorTemp = -3.2f;  status.outdoorValid = true;
+    status.radiatorTemp = 22.0f; status.radiatorValid = true;
+    status.fanOn = true;
+    status.elementOn = false;
+    status.auxOn = true;
+    status.radiatorFanOn = false;
+    status.targetSensorTemp = 5.0f;
+    status.sensorTempDiff = 15.0f;
+    status.targetAirTemp = 10.0f;
+    status.targetHysteresis = 0.5f;
+    status.auxHysteresis = 1.0f;
+    status.radiatorAlarm = RadiatorAlarmState::NORMAL;
+    status.uptimeSeconds = 12345UL;
+    status.freeHeapBytes = 30000UL;
+    status.rssiDbm = -60;
+    status.wifiConnected = true;
+    status.mqttConnected = true;
+
+    char buffer[512];
+    buildStatusJson(status, buffer, sizeof(buffer));
+
+    JsonDocument parsed;
+    DeserializationError err = deserializeJson(parsed, buffer);
+    TEST_ASSERT_EQUAL(DeserializationError::Ok, err.code());
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.5f, parsed["blownAirTemp"].as<float>());
+    TEST_ASSERT_TRUE(parsed["infoTemp"].isNull());
+    TEST_ASSERT_TRUE(parsed["fanOn"].as<bool>());
+    TEST_ASSERT_FALSE(parsed["elementOn"].as<bool>());
+    TEST_ASSERT_EQUAL_STRING("NORMAL", parsed["radiatorAlarm"].as<const char*>());
+    TEST_ASSERT_EQUAL_UINT32(12345UL, parsed["uptimeSeconds"].as<unsigned long>());
+    TEST_ASSERT_TRUE(parsed["mqttConnected"].as<bool>());
+}
+
+void test_buildStatusJson_reports_fan_fault_alarm(void) {
+    DeviceStatus status = {};
+    status.radiatorAlarm = RadiatorAlarmState::FAN_FAULT;
+    char buffer[512];
+    buildStatusJson(status, buffer, sizeof(buffer));
+    JsonDocument parsed;
+    deserializeJson(parsed, buffer);
+    TEST_ASSERT_EQUAL_STRING("FAN_FAULT", parsed["radiatorAlarm"].as<const char*>());
+}
+
 int main(int argc, char **argv) {
     UNITY_BEGIN();
     RUN_TEST(test_shouldStartHeating_below_lower_hysteresis_returns_true);
@@ -236,5 +286,7 @@ int main(int argc, char **argv) {
     RUN_TEST(test_isValidSensorTempDiff_below_min_returns_false);
     RUN_TEST(test_isValidSensorTempDiff_above_max_returns_false);
     RUN_TEST(test_isValidSensorTempDiff_at_bounds_returns_true);
+    RUN_TEST(test_buildStatusJson_roundtrips_all_fields);
+    RUN_TEST(test_buildStatusJson_reports_fan_fault_alarm);
     return UNITY_END();
 }

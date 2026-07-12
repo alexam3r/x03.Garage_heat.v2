@@ -1,5 +1,6 @@
 #include "control_logic.h"
 #include "config.h"
+#include <ArduinoJson.h>
 
 bool shouldStartHeating(float targetSensorReading, float targetSetpoint, float hysteresis) {
     return targetSensorReading < (targetSetpoint - hysteresis);
@@ -94,4 +95,43 @@ bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned l
 
 bool isValidSensorTempDiff(float diff) {
     return diff >= SENSOR_TEMP_DIFF_MIN && diff <= SENSOR_TEMP_DIFF_MAX;
+}
+
+static const char* radiatorAlarmToString(RadiatorAlarmState state) {
+    switch (state) {
+        case RadiatorAlarmState::FAN_FAULT: return "FAN_FAULT";
+        case RadiatorAlarmState::OVERTEMP:  return "OVERTEMP";
+        default:                            return "NORMAL";
+    }
+}
+
+void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferSize) {
+    JsonDocument doc;
+
+    if (status.blownAirValid) doc["blownAirTemp"] = status.blownAirTemp; else doc["blownAirTemp"] = nullptr;
+    if (status.targetValid)   doc["targetTemp"]   = status.targetTemp;   else doc["targetTemp"]   = nullptr;
+    if (status.infoValid)     doc["infoTemp"]     = status.infoTemp;     else doc["infoTemp"]     = nullptr;
+    if (status.outdoorValid)  doc["outdoorTemp"]  = status.outdoorTemp;  else doc["outdoorTemp"]  = nullptr;
+    if (status.radiatorValid) doc["radiatorTemp"] = status.radiatorTemp; else doc["radiatorTemp"] = nullptr;
+
+    doc["fanOn"] = status.fanOn;
+    doc["elementOn"] = status.elementOn;
+    doc["auxOn"] = status.auxOn;
+    doc["radiatorFanOn"] = status.radiatorFanOn;
+
+    doc["targetSensorTemp"] = status.targetSensorTemp;
+    doc["sensorTempDiff"] = status.sensorTempDiff;
+    doc["targetAirTemp"] = status.targetAirTemp;
+    doc["targetHysteresis"] = status.targetHysteresis;
+    doc["auxHysteresis"] = status.auxHysteresis;
+
+    doc["radiatorAlarm"] = radiatorAlarmToString(status.radiatorAlarm);
+
+    doc["uptimeSeconds"] = status.uptimeSeconds;
+    doc["freeHeapBytes"] = status.freeHeapBytes;
+    doc["rssiDbm"] = status.rssiDbm;
+    doc["wifiConnected"] = status.wifiConnected;
+    doc["mqttConnected"] = status.mqttConnected;
+
+    serializeJson(doc, outBuffer, bufferSize);
 }
