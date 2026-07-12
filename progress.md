@@ -146,7 +146,7 @@ EOF
 **Interfaces:**
 - Produces: all `#define` constants consumed by `control_logic.cpp` (radiator thresholds) and by every `main.cpp` task (pins, topics, periods, defaults).
 
-- [ ] **Step 1: Write `include/config.h`**
+- [x] **Step 1: Write `include/config.h`**
 
 ```cpp
 #pragma once
@@ -189,7 +189,7 @@ EOF
 #define RADIATOR_FAN_FAULT_TEMP        33.0f
 #define RADIATOR_CRITICAL_TEMP         35.0f
 #define RADIATOR_RECOVERY_TEMP         15.0f
-#define RADIATOR_FAN_MIN_RUNTIME       60UL      // секунд
+#define RADIATOR_FAN_MIN_RUNTIME_MS    60000UL
 #define RADIATOR_SENSOR_POLL_PERIOD_MS 60000UL
 
 // === Периоды опроса/публикации ===
@@ -214,10 +214,14 @@ EOF
 #define MQTT_TOPIC_CMD_RESTART       "garage/heat/restart"
 ```
 
-- [ ] **Step 2: Verify it compiles standalone (no Arduino symbols used)**
+- [x] **Step 2: Verify it compiles standalone (no Arduino symbols used)**
 
-Run: `pio test -e native --without-testing`
-Expected: `SUCCESS`
+`pio test -e native --without-testing` fails with `Nothing to build` on an empty
+`test/` directory (same PlatformIO CLI limitation documented in Task 1, Step 8) —
+`config.h` isn't consumed by any test suite yet, so this isn't a meaningful check here.
+Used a direct compiler check instead: `g++ -std=gnu++17 -fsyntax-only -x c++ include/config.h`.
+Actual: no errors (only a benign `#pragma once in main file` warning) — confirms
+`config.h` contains only preprocessor macros with no Arduino-core dependency.
 
 - [ ] **Step 3: Commit**
 
@@ -563,7 +567,7 @@ EOF
 - Modify: `test/test_control_logic/test_main.cpp`
 
 **Interfaces:**
-- Consumes: `RadiatorAlarmState` enum (Task 1), `config.h` constants `RADIATOR_FAN_ON_TEMP`, `RADIATOR_FAN_FAULT_TEMP`, `RADIATOR_CRITICAL_TEMP`, `RADIATOR_RECOVERY_TEMP`, `RADIATOR_FAN_MIN_RUNTIME` (Task 2).
+- Consumes: `RadiatorAlarmState` enum (Task 1), `config.h` constants `RADIATOR_FAN_ON_TEMP`, `RADIATOR_FAN_FAULT_TEMP`, `RADIATOR_CRITICAL_TEMP`, `RADIATOR_RECOVERY_TEMP`, `RADIATOR_FAN_MIN_RUNTIME_MS` (Task 2).
 - Produces: `struct RadiatorInput`, `struct RadiatorDecision`, `RadiatorDecision evaluateRadiator(const RadiatorInput& input)` — used by `main.cpp` Task 13.
 
 This is the most safety-critical function in the firmware — it decides when to force-shutdown D5/D6/D7. Test every branch from CLAUDE.md §3.3 individually.
@@ -717,7 +721,7 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
     if (in.radiatorTemp >= RADIATOR_CRITICAL_TEMP) {
         alarm = RadiatorAlarmState::OVERTEMP;
     } else if (in.radiatorTemp >= RADIATOR_FAN_FAULT_TEMP && fanOnSince != 0UL &&
-               (in.nowMillis - fanOnSince) >= (RADIATOR_FAN_MIN_RUNTIME * 1000UL)) {
+               (in.nowMillis - fanOnSince) >= RADIATOR_FAN_MIN_RUNTIME_MS) {
         alarm = RadiatorAlarmState::FAN_FAULT;
     }
 
