@@ -1437,7 +1437,7 @@ Flash 26.1%), native-тесты не затронуты (37/37 PASSED).
 - Consumes: `shouldAuxHeaterTurnOn`, `shouldAuxHeaterTurnOff` (Task 5); `outdoorTemp/outdoorValid` (Task 10); `setAuxHeater` (Task 9); `radiatorAlarmState` (declared here, populated by Task 13).
 - Produces: `auxHeaterLogicalState` global, MQTT-mutable `caloriferEnabled`/`targetAirTemp` globals — consumed by `main.cpp` Task 15.
 
-- [ ] **Step 1: Add aux heater globals** (insert alongside heater globals from Task 11)
+- [x] **Step 1: Add aux heater globals** (insert alongside heater globals from Task 11)
 
 ```cpp
 static AuxHeaterState auxHeaterLogicalState = AuxHeaterState::OFF;
@@ -1447,7 +1447,7 @@ static bool caloriferEnabled = false;
 static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
 ```
 
-- [ ] **Step 2: Add the aux heater tick** (insert before `setup()`)
+- [x] **Step 2: Add the aux heater tick** (insert before `setup()`)
 
 ```cpp
 static void auxHeaterTick() {
@@ -1469,7 +1469,7 @@ static void auxHeaterTick() {
 }
 ```
 
-- [ ] **Step 3: Wire the tick into `loop()`**
+- [x] **Step 3: Wire the tick into `loop()`**
 
 ```cpp
     fastSensorTick();
@@ -1479,12 +1479,12 @@ static void auxHeaterTick() {
     auxHeaterTick();
 ```
 
-- [ ] **Step 4: Verify the esp8266 environment compiles**
+- [x] **Step 4: Verify the esp8266 environment compiles**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp
@@ -1497,6 +1497,9 @@ git commit -m "$(cat <<'EOF'
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `dc8aca3`. esp8266 собирается (`SUCCESS`, RAM 34.8%/
+Flash 26.1%), native-тесты не затронуты (37/37 PASSED).
 
 ---
 
