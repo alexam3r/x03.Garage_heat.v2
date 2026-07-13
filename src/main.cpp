@@ -294,13 +294,17 @@ static void radiatorEscalationTick() {
     radiatorAlarmState = decision.alarmState;
     radiatorFanOnSince = decision.fanOnSince;
 
+    static bool wasForcedOff = false;
     if (decision.forceLoadsOff) {
-        DBG_PRINTLN("radiator: forcing all loads off");
+        if (!wasForcedOff) DBG_PRINTLN("radiator: forcing all loads off");
+        wasForcedOff = true;
         setElement(false);
         setFan(false);
         heaterState = HeaterState::OFF;
         setAuxHeater(false);
         auxHeaterLogicalState = AuxHeaterState::OFF;
+    } else {
+        wasForcedOff = false;
     }
 }
 
