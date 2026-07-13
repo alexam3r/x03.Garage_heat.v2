@@ -314,7 +314,10 @@ static void heaterTick() {
 
     switch (heaterState) {
         case HeaterState::OFF:
-            if (fanHeaterEnabled && targetValid && shouldStartHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS)) {
+            // targetValid и blownAirValid проверяются уже на старте, а не только в mustStop
+            // ниже — иначе при невалидном BLOWN_AIR элемент успевал бы включиться на такт
+            // (FAN_STARTING -> ELEMENT_DUTY_ON) и тут же выключиться по mustStop.
+            if (fanHeaterEnabled && targetValid && blownAirValid && shouldStartHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS)) {
                 setFan(true);
                 heaterState = HeaterState::FAN_STARTING;
                 dutyPhaseStartedAt = now;
