@@ -14,7 +14,7 @@
 - `loop()` must never call `delay()`. Every periodic process uses an independent `millis()`-based timer.
 - `include/secrets.h` is never committed (`.gitignore`); `include/secrets.h.example` is the committed template.
 - No numeric threshold from `CLAUDE.md` may be changed. Where `CLAUDE.md` leaves a formula qualitative (duty-cycle adaptation), the exact legacy Lua formula recovered from `docs/check_sensors.lua`/`docs/main.lua` is authoritative (±1000 ms step, `baseDelay/4` floor, `baseDelay/1.5`/`/2.5`/`/2` off-limit divisors, reset `20000 - floor(baseDelay/2)`).
-- ROM addresses for the three DS18b20 on D3 are unknown until real hardware is available — `config.h` ships with clearly-flagged placeholder byte arrays that compile but must be replaced before flashing to real hardware (CLAUDE.md §2/§7).
+- ROM addresses for the three DS18b20 on D3 were read from real hardware with `tools/scan_ds18b20` (2026-07-13) and are now real values in `config.h` (CLAUDE.md §2/§7).
 - **Every commit message must be written in Russian** (explicit user instruction).
 - Fan/element interlock (CLAUDE.md §3.4) is structural: `digitalWrite` on D5/D6 must never appear outside `setFan()`/`setElement()`.
 
@@ -1926,7 +1926,7 @@ Expected: empty output (everything from Tasks 1–16 already committed)
 
 No commit in this task — it is verification-only. If Step 5 shows uncommitted changes, they belong to an earlier task that was not committed; go back and commit them under that task's message before proceeding to hardware bring-up.
 
-**Remaining before real-hardware bring-up (outside this plan's scope):** read the three DS18b20 ROM addresses on bus D3 with a scanning sketch and replace the placeholders in `include/config.h` (CLAUDE.md §2/§7) — the only hardware-dependent step this plan could not close in advance.
+**ROM addresses done (2026-07-13):** the three DS18b20 on bus D3 were read with `tools/scan_ds18b20` and `include/config.h` now has real values (CLAUDE.md §2/§7) — the only hardware-dependent step this plan could not close in advance is now resolved.
 
 ---
 
