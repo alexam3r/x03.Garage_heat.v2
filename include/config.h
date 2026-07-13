@@ -1,5 +1,10 @@
 #pragma once
 
+// === Отладочный вывод в Serial ===
+// 1 — печатать события (переходы состояний, сенсоры, MQTT, watchdog) в Serial
+// для отладки; 0 — полностью отключить (макросы DBG_* схлопываются в no-op).
+#define DEBUG_LOG 1
+
 // === Пины (Wemos D1 mini, макросы D0..D8 из ядра Arduino для esp8266) ===
 #define PIN_CANNON_FAN       D5   // вентилятор тепловой пушки (триак MOC3066/BTA16)
 #define PIN_CANNON_ELEMENT   D6   // нагревательный элемент тепловой пушки (SSR)

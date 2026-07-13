@@ -8,6 +8,34 @@
 #include "control_logic.h"
 #include "secrets.h"
 
+#if DEBUG_LOG
+    #define DBG_PRINTLN(msg) Serial.println(msg)
+    #define DBG_PRINTF(...)  Serial.printf(__VA_ARGS__)
+#else
+    #define DBG_PRINTLN(msg)
+    #define DBG_PRINTF(...)
+#endif
+
+static const char* heaterStateName(HeaterState s) {
+    switch (s) {
+        case HeaterState::OFF:              return "OFF";
+        case HeaterState::FAN_STARTING:      return "FAN_STARTING";
+        case HeaterState::ELEMENT_DUTY_ON:   return "ELEMENT_DUTY_ON";
+        case HeaterState::ELEMENT_DUTY_OFF:  return "ELEMENT_DUTY_OFF";
+        case HeaterState::COOLDOWN:          return "COOLDOWN";
+    }
+    return "?";
+}
+
+static const char* radiatorAlarmName(RadiatorAlarmState s) {
+    switch (s) {
+        case RadiatorAlarmState::NORMAL:    return "NORMAL";
+        case RadiatorAlarmState::FAN_FAULT: return "FAN_FAULT";
+        case RadiatorAlarmState::OVERTEMP:  return "OVERTEMP";
+    }
+    return "?";
+}
+
 static OneWire oneWireRoles(PIN_ONEWIRE_ROLES);
 static DallasTemperature sensorsRoles(&oneWireRoles);
 static OneWire oneWireOutdoor(PIN_ONEWIRE_OUTDOOR);
@@ -30,6 +58,12 @@ static unsigned long fanCoolerDelay = FAN_COOLER_DELAY_DEFAULT_MS;
 
 static bool fastConversionPending = false;
 static bool radiatorConversionPending = false;
+
+static bool prevBlownAirValid = false;
+static bool prevTargetValid = false;
+static bool prevInfoValid = false;
+static bool prevOutdoorValid = false;
+static bool prevRadiatorValid = false;
 
 static unsigned long lastFastPoll = 0;
 static unsigned long lastRadiatorPoll = 0;
@@ -66,6 +100,7 @@ static bool auxHeaterState = false;
 static bool radiatorFanState = false;
 
 void setFan(bool on) {
+    if (on != cannonFanState) DBG_PRINTF("output CANNON_FAN: %s\n", on ? "ON" : "OFF");
     cannonFanState = on;
     digitalWrite(PIN_CANNON_FAN, on ? HIGH : LOW);
 }
@@ -75,16 +110,19 @@ void setElement(bool on) {
         Serial.println("setElement: refused, cannon fan is not running");
         return;
     }
+    if (on != cannonElementState) DBG_PRINTF("output CANNON_ELEMENT: %s\n", on ? "ON" : "OFF");
     cannonElementState = on;
     digitalWrite(PIN_CANNON_ELEMENT, on ? HIGH : LOW);
 }
 
 void setAuxHeater(bool on) {
+    if (on != auxHeaterState) DBG_PRINTF("output AUX_HEATER: %s\n", on ? "ON" : "OFF");
     auxHeaterState = on;
     digitalWrite(PIN_AUX_HEATER, on ? HIGH : LOW);
 }
 
 void setRadiatorFan(bool on) {
+    if (on != radiatorFanState) DBG_PRINTF("output RADIATOR_FAN: %s\n", on ? "ON" : "OFF");
     radiatorFanState = on;
     digitalWrite(PIN_RADIATOR_FAN, on ? HIGH : LOW);
 }
@@ -101,6 +139,7 @@ static void safeInitOutputs() {
 }
 
 static void connectWiFi() {
+    DBG_PRINTF("WiFi: connecting to \"%s\"\n", WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 }
@@ -114,17 +153,33 @@ static void fastSensorTick() {
         float blownAirRaw = sensorsRoles.getTempC(romBlownAir);
         blownAirValid = (blownAirRaw != DEVICE_DISCONNECTED_C);
         blownAirTemp = blownAirValid ? blownAirRaw : NAN;
+        if (blownAirValid != prevBlownAirValid) {
+            DBG_PRINTF("sensor BLOWN_AIR: %s\n", blownAirValid ? "OK" : "DISCONNECTED");
+            prevBlownAirValid = blownAirValid;
+        }
 
         float targetRaw = sensorsRoles.getTempC(romTarget);
         targetValid = (targetRaw != DEVICE_DISCONNECTED_C);
         targetTemp = targetValid ? targetRaw : NAN;
+        if (targetValid != prevTargetValid) {
+            DBG_PRINTF("sensor TARGET: %s\n", targetValid ? "OK" : "DISCONNECTED");
+            prevTargetValid = targetValid;
+        }
 
         float infoRaw = sensorsRoles.getTempC(romInfo);
         infoValid = (infoRaw != DEVICE_DISCONNECTED_C);
         infoTemp = infoValid ? infoRaw : NAN;
+        if (infoValid != prevInfoValid) {
+            DBG_PRINTF("sensor INFO: %s\n", infoValid ? "OK" : "DISCONNECTED");
+            prevInfoValid = infoValid;
+        }
 
         float outdoorRaw = sensorOutdoor.getTempCByIndex(0);
         outdoorValid = (outdoorRaw != DEVICE_DISCONNECTED_C);
+        if (outdoorValid != prevOutdoorValid) {
+            DBG_PRINTF("sensor OUTDOOR: %s\n", outdoorValid ? "OK" : "DISCONNECTED");
+            prevOutdoorValid = outdoorValid;
+        }
         if (outdoorValid) {
             outdoorTempRaw = outdoorRaw;
             outdoorTemp = applyAirTempCalibration(outdoorTempRaw, AIR_TEMP_CALIBRATION_OFFSET);
@@ -150,6 +205,10 @@ static void radiatorSensorTick() {
         float raw = sensorRadiator.getTempCByIndex(0);
         radiatorValid = (raw != DEVICE_DISCONNECTED_C);
         radiatorTemp = radiatorValid ? raw : NAN;
+        if (radiatorValid != prevRadiatorValid) {
+            DBG_PRINTF("sensor RADIATOR: %s\n", radiatorValid ? "OK" : "DISCONNECTED");
+            prevRadiatorValid = radiatorValid;
+        }
     }
 
     sensorRadiator.requestTemperatures();
@@ -163,6 +222,7 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     value[copyLen] = '\0';
 
     String topicStr(topic);
+    DBG_PRINTF("MQTT cmd: %s = %s\n", topic, value);
 
     if (topicStr == MQTT_TOPIC_CMD_FAN_HEATER) {
         fanHeaterEnabled = (strcmp(value, "ON") == 0);
@@ -172,12 +232,15 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         float diff = atof(value);
         if (isValidSensorTempDiff(diff)) {
             sensorTempDiff = diff;
+        } else {
+            DBG_PRINTF("MQTT cmd: SensorTempDiff=%.1f rejected, out of range\n", diff);
         }
     } else if (topicStr == MQTT_TOPIC_CMD_CALORIFER) {
         caloriferEnabled = (strcmp(value, "ON") == 0);
     } else if (topicStr == MQTT_TOPIC_CMD_TARGET_AIR) {
         targetAirTemp = atof(value);
     } else if (topicStr == MQTT_TOPIC_CMD_RESTART) {
+        DBG_PRINTLN("MQTT cmd: restart requested, shutting down outputs");
         setElement(false);
         setFan(false);
         setAuxHeater(false);
@@ -195,9 +258,11 @@ static void mqttReconnectTick() {
 
     if (WiFi.status() != WL_CONNECTED) return;
 
+    DBG_PRINTLN("MQTT: connecting to broker");
     bool connected = mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS,
                                          MQTT_TOPIC_STATE, 0, true, "OFF");
     if (connected) {
+        DBG_PRINTLN("MQTT: connected, subscribing to command topics");
         mqttClient.publish(MQTT_TOPIC_STATE, "ON", true);
         mqttClient.subscribe(MQTT_TOPIC_CMD_FAN_HEATER);
         mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_TEMP);
@@ -205,6 +270,8 @@ static void mqttReconnectTick() {
         mqttClient.subscribe(MQTT_TOPIC_CMD_CALORIFER);
         mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_AIR);
         mqttClient.subscribe(MQTT_TOPIC_CMD_RESTART);
+    } else {
+        DBG_PRINTF("MQTT: connect failed, state=%d\n", mqttClient.state());
     }
 }
 
@@ -220,10 +287,15 @@ static void radiatorEscalationTick() {
     RadiatorDecision decision = evaluateRadiator(in);
 
     setRadiatorFan(decision.fanOn);
+    if (decision.alarmState != radiatorAlarmState) {
+        DBG_PRINTF("radiator alarm: %s -> %s\n",
+                   radiatorAlarmName(radiatorAlarmState), radiatorAlarmName(decision.alarmState));
+    }
     radiatorAlarmState = decision.alarmState;
     radiatorFanOnSince = decision.fanOnSince;
 
     if (decision.forceLoadsOff) {
+        DBG_PRINTLN("radiator: forcing all loads off");
         setElement(false);
         setFan(false);
         heaterState = HeaterState::OFF;
@@ -234,6 +306,7 @@ static void radiatorEscalationTick() {
 
 static void heaterTick() {
     unsigned long now = millis();
+    HeaterState prevState = heaterState;
 
     switch (heaterState) {
         case HeaterState::OFF:
@@ -257,6 +330,8 @@ static void heaterTick() {
             bool mustStop = !fanHeaterEnabled || !targetValid || !blownAirValid ||
                              (targetValid && shouldStopHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS));
             if (mustStop) {
+                DBG_PRINTF("heater: stop requested (fanHeaterEnabled=%d targetValid=%d blownAirValid=%d)\n",
+                           fanHeaterEnabled, targetValid, blownAirValid);
                 setElement(false);
                 heaterState = HeaterState::COOLDOWN;
                 cooldownStartedAt = now;
@@ -282,6 +357,10 @@ static void heaterTick() {
             }
             break;
     }
+
+    if (heaterState != prevState) {
+        DBG_PRINTF("heater state: %s -> %s\n", heaterStateName(prevState), heaterStateName(heaterState));
+    }
 }
 
 static void dutyAdaptTick() {
@@ -294,6 +373,10 @@ static void dutyAdaptTick() {
 
     float sensorMaxTemp = targetSensorTemp + sensorTempDiff;
     DutyLimits limits = adaptDutyLimits(blownAirTemp, sensorMaxTemp, loadOnLimit, fanCoolerDelay);
+    if (limits.loadOnLimit != loadOnLimit || limits.loadOffLimit != loadOffLimit) {
+        DBG_PRINTF("duty adapt: loadOnLimit=%lu loadOffLimit=%lu (blownAir=%.1f)\n",
+                   limits.loadOnLimit, limits.loadOffLimit, blownAirTemp);
+    }
     loadOnLimit = limits.loadOnLimit;
     loadOffLimit = limits.loadOffLimit;
 }
@@ -352,11 +435,21 @@ static void statusPublishTick() {
     char buffer[MQTT_STATUS_BUFFER_SIZE];
     buildStatusJson(status, buffer, sizeof(buffer));
     mqttClient.publish(MQTT_TOPIC_STATUS, buffer);
+    DBG_PRINTLN("status: published");
 }
 
 static void connectivityWatchdogTick() {
     unsigned long now = millis();
-    bool fullyConnected = (WiFi.status() == WL_CONNECTED) && mqttClient.connected();
+    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    bool mqttConnected = mqttClient.connected();
+    bool fullyConnected = wifiConnected && mqttConnected;
+
+    static bool prevFullyConnected = true;
+    if (fullyConnected != prevFullyConnected) {
+        DBG_PRINTF("watchdog: connectivity %s (wifi=%d mqtt=%d)\n",
+                   fullyConnected ? "restored" : "lost", wifiConnected, mqttConnected);
+        prevFullyConnected = fullyConnected;
+    }
 
     if (fullyConnected) {
         lastFullyConnectedMillis = now;
@@ -364,6 +457,7 @@ static void connectivityWatchdogTick() {
     }
 
     if (shouldRestartForWatchdog(lastFullyConnectedMillis, now, WATCHDOG_TIMEOUT_MS)) {
+        DBG_PRINTLN("watchdog: timeout exceeded, shutting down outputs and restarting");
         setElement(false);
         setFan(false);
         setAuxHeater(false);
@@ -375,6 +469,7 @@ static void connectivityWatchdogTick() {
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
+    DBG_PRINTLN("garage-heat-v2: booting, outputs safe-initialized");
     connectWiFi();
 
     sensorsRoles.begin();
@@ -389,6 +484,7 @@ void setup() {
     mqttClient.setCallback(mqttCallback);
 
     lastFullyConnectedMillis = millis();
+    DBG_PRINTLN("garage-heat-v2: setup complete");
 }
 
 void loop() {
