@@ -1,9 +1,37 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
 
 #include "config.h"
 #include "control_logic.h"
 #include "secrets.h"
+
+static OneWire oneWireRoles(PIN_ONEWIRE_ROLES);
+static DallasTemperature sensorsRoles(&oneWireRoles);
+static OneWire oneWireOutdoor(PIN_ONEWIRE_OUTDOOR);
+static DallasTemperature sensorOutdoor(&oneWireOutdoor);
+static OneWire oneWireRadiator(PIN_ONEWIRE_RADIATOR);
+static DallasTemperature sensorRadiator(&oneWireRadiator);
+
+static DeviceAddress romBlownAir = ROM_BLOWN_AIR;
+static DeviceAddress romTarget = ROM_TARGET;
+static DeviceAddress romInfo = ROM_INFO;
+
+static float blownAirTemp = NAN; static bool blownAirValid = false;
+static float targetTemp = NAN;   static bool targetValid = false;
+static float infoTemp = NAN;     static bool infoValid = false;
+static float outdoorTempRaw = NAN; static bool outdoorValid = false;
+static float outdoorTemp = NAN;    // откалиброванная (CLAUDE.md §3.2)
+static float radiatorTemp = NAN; static bool radiatorValid = false;
+
+static unsigned long fanCoolerDelay = FAN_COOLER_DELAY_DEFAULT_MS;
+
+static bool fastConversionPending = false;
+static bool radiatorConversionPending = false;
+
+static unsigned long lastFastPoll = 0;
+static unsigned long lastRadiatorPoll = 0;
 
 static bool cannonFanState = false;
 static bool cannonElementState = false;
@@ -50,10 +78,68 @@ static void connectWiFi() {
     WiFi.begin(WIFI_SSID, WIFI_PASS);
 }
 
+static void fastSensorTick() {
+    unsigned long now = millis();
+    if (now - lastFastPoll < FAST_SENSOR_POLL_PERIOD_MS) return;
+    lastFastPoll = now;
+
+    if (fastConversionPending) {
+        float blownAirRaw = sensorsRoles.getTempC(romBlownAir);
+        blownAirValid = (blownAirRaw != DEVICE_DISCONNECTED_C);
+        blownAirTemp = blownAirValid ? blownAirRaw : NAN;
+
+        float targetRaw = sensorsRoles.getTempC(romTarget);
+        targetValid = (targetRaw != DEVICE_DISCONNECTED_C);
+        targetTemp = targetValid ? targetRaw : NAN;
+
+        float infoRaw = sensorsRoles.getTempC(romInfo);
+        infoValid = (infoRaw != DEVICE_DISCONNECTED_C);
+        infoTemp = infoValid ? infoRaw : NAN;
+
+        float outdoorRaw = sensorOutdoor.getTempCByIndex(0);
+        outdoorValid = (outdoorRaw != DEVICE_DISCONNECTED_C);
+        if (outdoorValid) {
+            outdoorTempRaw = outdoorRaw;
+            outdoorTemp = applyAirTempCalibration(outdoorTempRaw, AIR_TEMP_CALIBRATION_OFFSET);
+            fanCoolerDelay = selectFanCoolerDelay(outdoorTemp);
+        } else {
+            outdoorTempRaw = NAN;
+            outdoorTemp = NAN;
+            fanCoolerDelay = FAN_COOLER_DELAY_DEFAULT_MS;
+        }
+    }
+
+    sensorsRoles.requestTemperatures();
+    sensorOutdoor.requestTemperatures();
+    fastConversionPending = true;
+}
+
+static void radiatorSensorTick() {
+    unsigned long now = millis();
+    if (now - lastRadiatorPoll < RADIATOR_SENSOR_POLL_PERIOD_MS) return;
+    lastRadiatorPoll = now;
+
+    if (radiatorConversionPending) {
+        float raw = sensorRadiator.getTempCByIndex(0);
+        radiatorValid = (raw != DEVICE_DISCONNECTED_C);
+        radiatorTemp = radiatorValid ? raw : NAN;
+    }
+
+    sensorRadiator.requestTemperatures();
+    radiatorConversionPending = true;
+}
+
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
     connectWiFi();
+
+    sensorsRoles.begin();
+    sensorsRoles.setWaitForConversion(false);
+    sensorOutdoor.begin();
+    sensorOutdoor.setWaitForConversion(false);
+    sensorRadiator.begin();
+    sensorRadiator.setWaitForConversion(false);
 }
 
 void loop() {
@@ -61,4 +147,7 @@ void loop() {
         // Реконнект WiFi обрабатывается ESP8266WiFi автоматически (WIFI_STA);
         // явная неблокирующая проверка добавится вместе с watchdog (Task 16).
     }
+
+    fastSensorTick();
+    radiatorSensorTick();
 }
