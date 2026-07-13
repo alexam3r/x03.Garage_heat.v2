@@ -314,10 +314,15 @@ static void heaterTick() {
 
     switch (heaterState) {
         case HeaterState::OFF:
-            // targetValid и blownAirValid проверяются уже на старте, а не только в mustStop
-            // ниже — иначе при невалидном BLOWN_AIR элемент успевал бы включиться на такт
-            // (FAN_STARTING -> ELEMENT_DUTY_ON) и тут же выключиться по mustStop.
-            if (fanHeaterEnabled && targetValid && blownAirValid && shouldStartHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS)) {
+            // targetValid/blownAirValid — см. mustStop ниже (тот же критерий на старте, не
+            // только во время работы). radiatorAlarmState обязателен здесь же: без этой
+            // проверки radiatorEscalationTick() каждую итерацию сбрасывает heaterState в OFF
+            // и глушит вентилятор, а эта ветка тут же снова его включает — дребезг D5 на
+            // каждом loop() пока авария активна. auxHeaterTick() уже требует NORMAL первым
+            // условием — здесь та же защита для симметрии.
+            if (fanHeaterEnabled && targetValid && blownAirValid &&
+                radiatorAlarmState == RadiatorAlarmState::NORMAL &&
+                shouldStartHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS)) {
                 setFan(true);
                 heaterState = HeaterState::FAN_STARTING;
                 dutyPhaseStartedAt = now;
