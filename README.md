@@ -147,45 +147,52 @@ mosquitto_sub -h <broker> -u <user> -P <pass> -t 'garage/heat/status' -v
 mosquitto_sub -h <broker> -u <user> -P <pass> -t 'garage/heat/state' -v
 ```
 
-`garage/heat/status` — JSON раз в 60 секунд:
+`garage/heat/status` — JSON раз в 60 секунд. Поле температуры — `null`, если
+соответствующий датчик отвалился (пример ниже не строгий JSON — со
+встроенными комментариями по каждому полю):
 
-```json
+```jsonc
 {
-  "blownAirTemp": 18.5, "targetTemp": 5.2, "infoTemp": 4.9,
-  "outdoorTemp": -3.0, "radiatorTemp": 22.1,
-  "fanOn": true, "elementOn": false, "auxOn": true, "radiatorFanOn": false,
-  "targetSensorTemp": 5.0, "sensorTempDiff": 15, "targetAirTemp": 10.0,
-  "targetHysteresis": 0.5, "auxHysteresis": 1.0,
+  // датчик обдува пушки (в потоке горячего воздуха от элемента) — вход адаптации
+  // duty-цикла, CLAUDE.md §2/§3.1; сам по себе не участвует в таргете хранения
+  "blownAirTemp": 18.5,
+
+  // целевой датчик зоны хранения — по нему держится targetSensorTemp
+  // с гистерезисом targetHysteresis, §3.1
+  "targetTemp": 5.2,
+
+  // информационный датчик — ни в каких расчётах не участвует, только
+  // для наблюдения, §2
+  "infoTemp": 4.9,
+
+  // уличный воздух с калибровочной поправкой — вход термоконтура вспом.
+  // нагревателя и таблицы fanCoolerDelay, §3.1/§3.2
+  "outdoorTemp": -3.0,
+
+  // радиатор SSR (общий для D6/D7) — вход эскалации перегрева radiatorAlarm, §3.3
+  "radiatorTemp": 22.1,
+
+  "fanOn": true,          // выход D5 — вентилятор тепловой пушки (триак)
+  "elementOn": false,     // выход D6 — нагревательный элемент пушки; не включается без fanOn, §3.4
+  "auxOn": true,          // выход D7 — вспомогательный нагреватель
+  "radiatorFanOn": false, // выход D8 — вентилятор охлаждения радиатора SSR
+
+  "targetSensorTemp": 5.0,  // текущий таргет хранения (команда targetSensorTemp), дефолт 5.0°C
+  "sensorTempDiff": 15,     // текущий порог адаптации duty-цикла (команда SensorTempDiff), дефолт 15
+  "targetAirTemp": 10.0,    // текущий таргет вспом. нагревателя (команда targetAirTemp), дефолт 10.0°C
+  "targetHysteresis": 0.5,  // гистерезис таргета хранения, константа ±0.5°C
+  "auxHysteresis": 1.0,     // гистерезис таргета вспом. нагревателя, константа ±1.0°C
+
+  // "NORMAL" / "FAN_FAULT" / "OVERTEMP" — эскалация защиты радиатора, §3.3
   "radiatorAlarm": "NORMAL",
-  "uptimeSeconds": 3600, "freeHeapBytes": 30000, "rssiDbm": -62,
-  "wifiConnected": true, "mqttConnected": true
+
+  "uptimeSeconds": 3600,   // время с последней загрузки, секунды
+  "freeHeapBytes": 30000,  // свободная куча ESP8266, байты — индикатор утечек памяти
+  "rssiDbm": -62,          // уровень сигнала WiFi, дБм (отрицательное число, ближе к 0 — сильнее)
+  "wifiConnected": true,   // подключение к WiFi (есть IP)
+  "mqttConnected": true    // подключение к MQTT-брокеру
 }
 ```
-
-Поле температуры — `null`, если соответствующий датчик отвалился. Расшифровка полей:
-
-| Поле | Значение |
-|---|---|
-| `blownAirTemp` | датчик обдува пушки (в потоке горячего воздуха от элемента) — вход адаптации duty-цикла, CLAUDE.md §2/§3.1; сам по себе не участвует в таргете хранения |
-| `targetTemp` | целевой датчик зоны хранения — по нему держится `targetSensorTemp` с гистерезисом `targetHysteresis`, §3.1 |
-| `infoTemp` | информационный датчик — ни в каких расчётах не участвует, только для наблюдения, §2 |
-| `outdoorTemp` | уличный воздух с калибровочной поправкой — вход термоконтура вспом. нагревателя и таблицы `fanCoolerDelay`, §3.1/§3.2 |
-| `radiatorTemp` | радиатор SSR (общий для D6/D7) — вход эскалации перегрева `radiatorAlarm`, §3.3 |
-| `fanOn` | выход D5 — вентилятор тепловой пушки (триак) |
-| `elementOn` | выход D6 — нагревательный элемент пушки; не включается без `fanOn`, §3.4 |
-| `auxOn` | выход D7 — вспомогательный нагреватель |
-| `radiatorFanOn` | выход D8 — вентилятор охлаждения радиатора SSR |
-| `targetSensorTemp` | текущий таргет хранения (команда `targetSensorTemp`), дефолт `5.0` °C |
-| `sensorTempDiff` | текущий порог адаптации duty-цикла (команда `SensorTempDiff`), дефолт `15` |
-| `targetAirTemp` | текущий таргет вспом. нагревателя (команда `targetAirTemp`), дефолт `10.0` °C |
-| `targetHysteresis` | гистерезис таргета хранения, константа `±0.5` °C |
-| `auxHysteresis` | гистерезис таргета вспом. нагревателя, константа `±1.0` °C |
-| `radiatorAlarm` | `"NORMAL"` / `"FAN_FAULT"` / `"OVERTEMP"` — эскалация защиты радиатора, §3.3 |
-| `uptimeSeconds` | время с последней загрузки, секунды |
-| `freeHeapBytes` | свободная куча ESP8266, байты — индикатор утечек памяти |
-| `rssiDbm` | уровень сигнала WiFi, дБм (отрицательное число, ближе к 0 — сильнее) |
-| `wifiConnected` | подключение к WiFi (есть IP) |
-| `mqttConnected` | подключение к MQTT-брокеру |
 
 `garage/heat/state` — `"ON"` (retain) пока прошивка жива; `"OFF"` — LWT,
 брокер проставляет сам при обрыве TCP-сессии (устройство пропало из сети или
