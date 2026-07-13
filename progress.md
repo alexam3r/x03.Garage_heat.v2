@@ -1302,7 +1302,7 @@ Flash 26.1%), native-тесты не затронуты (37/37 PASSED).
 - Consumes: `shouldStartHeating`, `shouldStopHeating`, `resetLoadOnLimit`, `adaptDutyLimits`, `DutyLimits` (Tasks 3/4); cached sensor globals `targetTemp/targetValid`, `blownAirTemp/blownAirValid`, `fanCoolerDelay` (Task 10); `setFan`/`setElement` (Task 9).
 - Produces: `heaterState` global, MQTT-mutable `fanHeaterEnabled`/`targetSensorTemp`/`sensorTempDiff` globals (defaults from config.h, wired to MQTT in Task 14) — consumed by `main.cpp` Task 13 (radiator force-shutdown) and Task 15 (status JSON).
 
-- [ ] **Step 1: Add heater state globals** (insert alongside the sensor globals from Task 10)
+- [x] **Step 1: Add heater state globals** (insert alongside the sensor globals from Task 10)
 
 ```cpp
 static HeaterState heaterState = HeaterState::OFF;
@@ -1317,7 +1317,7 @@ static float targetSensorTemp = DEFAULT_TARGET_STORAGE_TEMP;
 static float sensorTempDiff = DEFAULT_SENSOR_TEMP_DIFF;
 ```
 
-- [ ] **Step 2: Add the heater state machine tick and duty-adaptation tick** (insert before `setup()`)
+- [x] **Step 2: Add the heater state machine tick and duty-adaptation tick** (insert before `setup()`)
 
 ```cpp
 static void heaterTick() {
@@ -1387,7 +1387,7 @@ static void dutyAdaptTick() {
 }
 ```
 
-- [ ] **Step 3: Wire both ticks into `loop()`**
+- [x] **Step 3: Wire both ticks into `loop()`**
 
 ```cpp
 void loop() {
@@ -1403,12 +1403,12 @@ void loop() {
 }
 ```
 
-- [ ] **Step 4: Verify the esp8266 environment compiles**
+- [x] **Step 4: Verify the esp8266 environment compiles**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp
@@ -1422,6 +1422,9 @@ duty-цикла по BLOWN_AIR — раз в 10с, независимо от 5с
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `df43553`. esp8266 собирается (`SUCCESS`, RAM 34.8%/
+Flash 26.1%), native-тесты не затронуты (37/37 PASSED).
 
 ---
 
