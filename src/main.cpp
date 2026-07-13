@@ -58,6 +58,7 @@ static PubSubClient mqttClient(wifiClient);
 static unsigned long lastMqttReconnectAttempt = 0;
 
 static unsigned long lastStatusPublish = 0;
+static unsigned long lastFullyConnectedMillis = 0;
 
 static bool cannonFanState = false;
 static bool cannonElementState = false;
@@ -353,6 +354,24 @@ static void statusPublishTick() {
     mqttClient.publish(MQTT_TOPIC_STATUS, buffer);
 }
 
+static void connectivityWatchdogTick() {
+    unsigned long now = millis();
+    bool fullyConnected = (WiFi.status() == WL_CONNECTED) && mqttClient.connected();
+
+    if (fullyConnected) {
+        lastFullyConnectedMillis = now;
+        return;
+    }
+
+    if (shouldRestartForWatchdog(lastFullyConnectedMillis, now, WATCHDOG_TIMEOUT_MS)) {
+        setElement(false);
+        setFan(false);
+        setAuxHeater(false);
+        setRadiatorFan(false);
+        ESP.restart();
+    }
+}
+
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
@@ -368,14 +387,11 @@ void setup() {
     mqttClient.setBufferSize(MQTT_STATUS_BUFFER_SIZE);
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
+
+    lastFullyConnectedMillis = millis();
 }
 
 void loop() {
-    if (WiFi.status() != WL_CONNECTED) {
-        // Реконнект WiFi обрабатывается ESP8266WiFi автоматически (WIFI_STA);
-        // явная неблокирующая проверка добавится вместе с watchdog (Task 16).
-    }
-
     mqttReconnectTick();
     mqttClient.loop();
 
@@ -386,4 +402,5 @@ void loop() {
     dutyAdaptTick();
     auxHeaterTick();
     statusPublishTick();
+    connectivityWatchdogTick();
 }
