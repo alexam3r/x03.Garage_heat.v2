@@ -50,6 +50,8 @@ static RadiatorAlarmState radiatorAlarmState = RadiatorAlarmState::NORMAL;
 static bool caloriferEnabled = false;
 static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
 
+static unsigned long radiatorFanOnSince = 0;
+
 static bool cannonFanState = false;
 static bool cannonElementState = false;
 static bool auxHeaterState = false;
@@ -144,6 +146,30 @@ static void radiatorSensorTick() {
 
     sensorRadiator.requestTemperatures();
     radiatorConversionPending = true;
+}
+
+static void radiatorEscalationTick() {
+    RadiatorInput in;
+    in.radiatorTemp = radiatorTemp;
+    in.sensorValid = radiatorValid;
+    in.nowMillis = millis();
+    in.fanOnSince = radiatorFanOnSince;
+    in.fanWasOn = radiatorFanState;
+    in.previousAlarm = radiatorAlarmState;
+
+    RadiatorDecision decision = evaluateRadiator(in);
+
+    setRadiatorFan(decision.fanOn);
+    radiatorAlarmState = decision.alarmState;
+    radiatorFanOnSince = decision.fanOnSince;
+
+    if (decision.forceLoadsOff) {
+        setElement(false);
+        setFan(false);
+        heaterState = HeaterState::OFF;
+        setAuxHeater(false);
+        auxHeaterLogicalState = AuxHeaterState::OFF;
+    }
 }
 
 static void heaterTick() {
@@ -251,6 +277,7 @@ void loop() {
 
     fastSensorTick();
     radiatorSensorTick();
+    radiatorEscalationTick();
     heaterTick();
     dutyAdaptTick();
     auxHeaterTick();
