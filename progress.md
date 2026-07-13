@@ -1512,13 +1512,13 @@ Flash 26.1%), native-тесты не затронуты (37/37 PASSED).
 - Consumes: `evaluateRadiator`, `RadiatorInput`, `RadiatorDecision` (Task 6); `radiatorTemp/radiatorValid` (Task 10); `setRadiatorFan`, `setElement`, `setFan`, `setAuxHeater` (Task 9); `heaterState`, `auxHeaterLogicalState` (Tasks 11/12).
 - Produces: updates to `radiatorAlarmState` (declared in Task 12) and new global `radiatorFanOnSince` — consumed by `main.cpp` Task 15.
 
-- [ ] **Step 1: Add the radiator fan-on-since tracker** (insert alongside the globals from Task 12)
+- [x] **Step 1: Add the radiator fan-on-since tracker** (insert alongside the globals from Task 12)
 
 ```cpp
 static unsigned long radiatorFanOnSince = 0;
 ```
 
-- [ ] **Step 2: Add the radiator escalation tick** (insert before `setup()`, right after `radiatorSensorTick()` since it must run on the same 60s cadence)
+- [x] **Step 2: Add the radiator escalation tick** (insert before `setup()`, right after `radiatorSensorTick()` since it must run on the same 60s cadence)
 
 ```cpp
 static void radiatorEscalationTick() {
@@ -1548,7 +1548,7 @@ static void radiatorEscalationTick() {
 
 Note: `radiatorFanState` is the private state variable inside `setRadiatorFan()`/`setFan()`/`setElement()` in Task 9 — change those four functions' local statics (`cannonFanState`, `cannonElementState`, `auxHeaterState`, `radiatorFanState`) from `static bool` at file scope (already file-scope static in Task 9) so they're visible here; no further change needed since Task 9 already declared them at file scope, not function-local.
 
-- [ ] **Step 3: Call the escalation tick right after the radiator sensor tick in `loop()`**
+- [x] **Step 3: Call the escalation tick right after the radiator sensor tick in `loop()`**
 
 ```cpp
     fastSensorTick();
@@ -1559,12 +1559,12 @@ Note: `radiatorFanState` is the private state variable inside `setRadiatorFan()`
     auxHeaterTick();
 ```
 
-- [ ] **Step 4: Verify the esp8266 environment compiles**
+- [x] **Step 4: Verify the esp8266 environment compiles**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp
@@ -1577,6 +1577,9 @@ D5/D6/D7 безусловно — CLAUDE.md §3.3, §7 дизайн-докуме
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `e3c2e30`. esp8266 собирается (`SUCCESS`, RAM 34.9%/
+Flash 26.2%), native-тесты не затронуты (37/37 PASSED).
 
 ---
 
