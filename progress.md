@@ -1731,13 +1731,13 @@ Flash 27.3%), native-тесты не затронуты (37/37 PASSED). API `con
 - Consumes: `buildStatusJson`, `DeviceStatus` (Task 8); every cached sensor/state global from Tasks 10–14.
 - Produces: nothing consumed by later tasks (terminal wiring for the status pipeline).
 
-- [ ] **Step 1: Add the status-publish timer global** (insert alongside other globals)
+- [x] **Step 1: Add the status-publish timer global** (insert alongside other globals)
 
 ```cpp
 static unsigned long lastStatusPublish = 0;
 ```
 
-- [ ] **Step 2: Add the status-publish tick** (insert before `setup()`)
+- [x] **Step 2: Add the status-publish tick** (insert before `setup()`)
 
 ```cpp
 static void statusPublishTick() {
@@ -1779,7 +1779,7 @@ static void statusPublishTick() {
 }
 ```
 
-- [ ] **Step 3: Wire the tick into `loop()`**
+- [x] **Step 3: Wire the tick into `loop()`**
 
 ```cpp
     fastSensorTick();
@@ -1791,12 +1791,12 @@ static void statusPublishTick() {
     statusPublishTick();
 ```
 
-- [ ] **Step 4: Verify the esp8266 environment compiles**
+- [x] **Step 4: Verify the esp8266 environment compiles**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp
@@ -1810,6 +1810,14 @@ CLAUDE.md §4.
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `484a508`. esp8266 собирается (`SUCCESS`, RAM 35.9%/
+Flash 27.8%), native-тесты не затронуты (37/37 PASSED). Отклонение от буквального
+текста плана: дефолтный `MQTT_MAX_PACKET_SIZE` у PubSubClient — 256 байт, JSON-
+статус (~19 полей) в него не помещается — добавлены `MQTT_STATUS_BUFFER_SIZE=640`
+(`config.h`) и `mqttClient.setBufferSize(...)` в `setup()`, без чего `publish()`
+статуса молча проваливался бы. Проверено через context7 (`setBufferSize` вызывать
+до `connect()`).
 
 ---
 
