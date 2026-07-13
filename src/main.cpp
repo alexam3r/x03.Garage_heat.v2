@@ -2,6 +2,7 @@
 #include <ESP8266WiFi.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <PubSubClient.h>
 
 #include "config.h"
 #include "control_logic.h"
@@ -51,6 +52,10 @@ static bool caloriferEnabled = false;
 static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
 
 static unsigned long radiatorFanOnSince = 0;
+
+static WiFiClient wifiClient;
+static PubSubClient mqttClient(wifiClient);
+static unsigned long lastMqttReconnectAttempt = 0;
 
 static bool cannonFanState = false;
 static bool cannonElementState = false;
@@ -146,6 +151,58 @@ static void radiatorSensorTick() {
 
     sensorRadiator.requestTemperatures();
     radiatorConversionPending = true;
+}
+
+static void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    char value[32];
+    unsigned int copyLen = (length < sizeof(value) - 1) ? length : sizeof(value) - 1;
+    memcpy(value, payload, copyLen);
+    value[copyLen] = '\0';
+
+    String topicStr(topic);
+
+    if (topicStr == MQTT_TOPIC_CMD_FAN_HEATER) {
+        fanHeaterEnabled = (strcmp(value, "ON") == 0);
+    } else if (topicStr == MQTT_TOPIC_CMD_TARGET_TEMP) {
+        targetSensorTemp = atof(value);
+    } else if (topicStr == MQTT_TOPIC_CMD_SENSOR_DIFF) {
+        float diff = atof(value);
+        if (isValidSensorTempDiff(diff)) {
+            sensorTempDiff = diff;
+        }
+    } else if (topicStr == MQTT_TOPIC_CMD_CALORIFER) {
+        caloriferEnabled = (strcmp(value, "ON") == 0);
+    } else if (topicStr == MQTT_TOPIC_CMD_TARGET_AIR) {
+        targetAirTemp = atof(value);
+    } else if (topicStr == MQTT_TOPIC_CMD_RESTART) {
+        setElement(false);
+        setFan(false);
+        setAuxHeater(false);
+        setRadiatorFan(false);
+        ESP.restart();
+    }
+}
+
+static void mqttReconnectTick() {
+    if (mqttClient.connected()) return;
+
+    unsigned long now = millis();
+    if (now - lastMqttReconnectAttempt < MQTT_RECONNECT_PERIOD_MS) return;
+    lastMqttReconnectAttempt = now;
+
+    if (WiFi.status() != WL_CONNECTED) return;
+
+    bool connected = mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS,
+                                         MQTT_TOPIC_STATE, 0, true, "OFF");
+    if (connected) {
+        mqttClient.publish(MQTT_TOPIC_STATE, "ON", true);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_FAN_HEATER);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_TEMP);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_SENSOR_DIFF);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_CALORIFER);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_AIR);
+        mqttClient.subscribe(MQTT_TOPIC_CMD_RESTART);
+    }
 }
 
 static void radiatorEscalationTick() {
@@ -267,6 +324,9 @@ void setup() {
     sensorOutdoor.setWaitForConversion(false);
     sensorRadiator.begin();
     sensorRadiator.setWaitForConversion(false);
+
+    mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
+    mqttClient.setCallback(mqttCallback);
 }
 
 void loop() {
@@ -274,6 +334,9 @@ void loop() {
         // Реконнект WiFi обрабатывается ESP8266WiFi автоматически (WIFI_STA);
         // явная неблокирующая проверка добавится вместе с watchdog (Task 16).
     }
+
+    mqttReconnectTick();
+    mqttClient.loop();
 
     fastSensorTick();
     radiatorSensorTick();
