@@ -33,6 +33,17 @@ static bool radiatorConversionPending = false;
 static unsigned long lastFastPoll = 0;
 static unsigned long lastRadiatorPoll = 0;
 
+static HeaterState heaterState = HeaterState::OFF;
+static unsigned long dutyPhaseStartedAt = 0;
+static unsigned long cooldownStartedAt = 0;
+static unsigned long loadOnLimit = 0;
+static unsigned long loadOffLimit = 0;
+static unsigned long lastDutyAdaptCheck = 0;
+
+static bool fanHeaterEnabled = false;
+static float targetSensorTemp = DEFAULT_TARGET_STORAGE_TEMP;
+static float sensorTempDiff = DEFAULT_SENSOR_TEMP_DIFF;
+
 static bool cannonFanState = false;
 static bool cannonElementState = false;
 static bool auxHeaterState = false;
@@ -129,6 +140,72 @@ static void radiatorSensorTick() {
     radiatorConversionPending = true;
 }
 
+static void heaterTick() {
+    unsigned long now = millis();
+
+    switch (heaterState) {
+        case HeaterState::OFF:
+            if (fanHeaterEnabled && targetValid && shouldStartHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS)) {
+                setFan(true);
+                heaterState = HeaterState::FAN_STARTING;
+                dutyPhaseStartedAt = now;
+            }
+            break;
+
+        case HeaterState::FAN_STARTING:
+            loadOnLimit = resetLoadOnLimit(fanCoolerDelay);
+            loadOffLimit = fanCoolerDelay / 2UL;
+            setElement(true);
+            heaterState = HeaterState::ELEMENT_DUTY_ON;
+            dutyPhaseStartedAt = now;
+            break;
+
+        case HeaterState::ELEMENT_DUTY_ON:
+        case HeaterState::ELEMENT_DUTY_OFF: {
+            bool mustStop = !fanHeaterEnabled || !targetValid || !blownAirValid ||
+                             (targetValid && shouldStopHeating(targetTemp, targetSensorTemp, TARGET_STORAGE_HYSTERESIS));
+            if (mustStop) {
+                setElement(false);
+                heaterState = HeaterState::COOLDOWN;
+                cooldownStartedAt = now;
+                break;
+            }
+
+            if (heaterState == HeaterState::ELEMENT_DUTY_ON && (now - dutyPhaseStartedAt) >= loadOnLimit) {
+                setElement(false);
+                heaterState = HeaterState::ELEMENT_DUTY_OFF;
+                dutyPhaseStartedAt = now;
+            } else if (heaterState == HeaterState::ELEMENT_DUTY_OFF && (now - dutyPhaseStartedAt) >= loadOffLimit) {
+                setElement(true);
+                heaterState = HeaterState::ELEMENT_DUTY_ON;
+                dutyPhaseStartedAt = now;
+            }
+            break;
+        }
+
+        case HeaterState::COOLDOWN:
+            if (now - cooldownStartedAt >= fanCoolerDelay) {
+                setFan(false);
+                heaterState = HeaterState::OFF;
+            }
+            break;
+    }
+}
+
+static void dutyAdaptTick() {
+    unsigned long now = millis();
+    if (now - lastDutyAdaptCheck < DUTY_ADAPT_CHECK_PERIOD_MS) return;
+    lastDutyAdaptCheck = now;
+
+    if (heaterState != HeaterState::ELEMENT_DUTY_ON && heaterState != HeaterState::ELEMENT_DUTY_OFF) return;
+    if (!blownAirValid) return;
+
+    float sensorMaxTemp = targetSensorTemp + sensorTempDiff;
+    DutyLimits limits = adaptDutyLimits(blownAirTemp, sensorMaxTemp, loadOnLimit, fanCoolerDelay);
+    loadOnLimit = limits.loadOnLimit;
+    loadOffLimit = limits.loadOffLimit;
+}
+
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
@@ -150,4 +227,6 @@ void loop() {
 
     fastSensorTick();
     radiatorSensorTick();
+    heaterTick();
+    dutyAdaptTick();
 }
