@@ -60,3 +60,7 @@
 #define MQTT_TOPIC_CMD_CALORIFER     "garage/heat/calorifer"
 #define MQTT_TOPIC_CMD_TARGET_AIR    "garage/heat/targetAirTemp"
 #define MQTT_TOPIC_CMD_RESTART       "garage/heat/restart"
+
+// JSON-статус (~19 полей) превышает дефолтный MQTT_MAX_PACKET_SIZE (256 байт)
+// PubSubClient — без явного увеличения буфера publish() статуса молча провалится.
+#define MQTT_STATUS_BUFFER_SIZE      640

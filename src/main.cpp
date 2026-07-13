@@ -57,6 +57,8 @@ static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static unsigned long lastMqttReconnectAttempt = 0;
 
+static unsigned long lastStatusPublish = 0;
+
 static bool cannonFanState = false;
 static bool cannonElementState = false;
 static bool auxHeaterState = false;
@@ -313,6 +315,44 @@ static void auxHeaterTick() {
     }
 }
 
+static void statusPublishTick() {
+    unsigned long now = millis();
+    if (now - lastStatusPublish < MQTT_STATUS_PERIOD_MS) return;
+    lastStatusPublish = now;
+
+    if (!mqttClient.connected()) return;
+
+    DeviceStatus status;
+    status.blownAirTemp = blownAirTemp; status.blownAirValid = blownAirValid;
+    status.targetTemp = targetTemp;     status.targetValid = targetValid;
+    status.infoTemp = infoTemp;         status.infoValid = infoValid;
+    status.outdoorTemp = outdoorTemp;   status.outdoorValid = outdoorValid;
+    status.radiatorTemp = radiatorTemp; status.radiatorValid = radiatorValid;
+
+    status.fanOn = cannonFanState;
+    status.elementOn = cannonElementState;
+    status.auxOn = auxHeaterState;
+    status.radiatorFanOn = radiatorFanState;
+
+    status.targetSensorTemp = targetSensorTemp;
+    status.sensorTempDiff = sensorTempDiff;
+    status.targetAirTemp = targetAirTemp;
+    status.targetHysteresis = TARGET_STORAGE_HYSTERESIS;
+    status.auxHysteresis = TARGET_AUX_AIR_HYSTERESIS;
+
+    status.radiatorAlarm = radiatorAlarmState;
+
+    status.uptimeSeconds = millis() / 1000UL;
+    status.freeHeapBytes = ESP.getFreeHeap();
+    status.rssiDbm = WiFi.RSSI();
+    status.wifiConnected = (WiFi.status() == WL_CONNECTED);
+    status.mqttConnected = mqttClient.connected();
+
+    char buffer[MQTT_STATUS_BUFFER_SIZE];
+    buildStatusJson(status, buffer, sizeof(buffer));
+    mqttClient.publish(MQTT_TOPIC_STATUS, buffer);
+}
+
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
@@ -325,6 +365,7 @@ void setup() {
     sensorRadiator.begin();
     sensorRadiator.setWaitForConversion(false);
 
+    mqttClient.setBufferSize(MQTT_STATUS_BUFFER_SIZE);
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
 }
@@ -344,4 +385,5 @@ void loop() {
     heaterTick();
     dutyAdaptTick();
     auxHeaterTick();
+    statusPublishTick();
 }
