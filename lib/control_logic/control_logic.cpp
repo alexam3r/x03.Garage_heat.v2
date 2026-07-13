@@ -108,30 +108,35 @@ static const char* radiatorAlarmToString(RadiatorAlarmState state) {
 void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferSize) {
     JsonDocument doc;
 
+    // Датчик обдува пушки (в потоке горячего воздуха от элемента) — вход адаптации duty-цикла (CLAUDE.md §2/§3.1)
     if (status.blownAirValid) doc["blownAirTemp"] = status.blownAirTemp; else doc["blownAirTemp"] = nullptr;
+    // Целевой датчик зоны хранения — по нему держится targetSensorTemp с гистерезисом targetHysteresis (§3.1)
     if (status.targetValid)   doc["targetTemp"]   = status.targetTemp;   else doc["targetTemp"]   = nullptr;
+    // Информационный датчик — ни в каких расчётах не участвует, только для наблюдения (§2)
     if (status.infoValid)     doc["infoTemp"]     = status.infoTemp;     else doc["infoTemp"]     = nullptr;
+    // Уличный воздух (с калибровочной поправкой) — вход термоконтура вспом. нагревателя и таблицы fanCoolerDelay (§3.1/§3.2)
     if (status.outdoorValid)  doc["outdoorTemp"]  = status.outdoorTemp;  else doc["outdoorTemp"]  = nullptr;
+    // Радиатор SSR (общий для D6/D7) — вход эскалации перегрева radiatorAlarm (§3.3)
     if (status.radiatorValid) doc["radiatorTemp"] = status.radiatorTemp; else doc["radiatorTemp"] = nullptr;
 
-    doc["fanOn"] = status.fanOn;
-    doc["elementOn"] = status.elementOn;
-    doc["auxOn"] = status.auxOn;
-    doc["radiatorFanOn"] = status.radiatorFanOn;
+    doc["fanOn"] = status.fanOn;                 // выход D5: вентилятор тепловой пушки (триак)
+    doc["elementOn"] = status.elementOn;         // выход D6: нагревательный элемент пушки (не включается без fanOn, §3.4)
+    doc["auxOn"] = status.auxOn;                 // выход D7: вспомогательный нагреватель
+    doc["radiatorFanOn"] = status.radiatorFanOn; // выход D8: вентилятор охлаждения радиатора SSR
 
-    doc["targetSensorTemp"] = status.targetSensorTemp;
-    doc["sensorTempDiff"] = status.sensorTempDiff;
-    doc["targetAirTemp"] = status.targetAirTemp;
-    doc["targetHysteresis"] = status.targetHysteresis;
-    doc["auxHysteresis"] = status.auxHysteresis;
+    doc["targetSensorTemp"] = status.targetSensorTemp; // текущий таргет хранения (MQTT: targetSensorTemp), дефолт 5.0°C
+    doc["sensorTempDiff"] = status.sensorTempDiff;     // текущий порог адаптации duty-цикла (MQTT: SensorTempDiff), дефолт 15
+    doc["targetAirTemp"] = status.targetAirTemp;       // текущий таргет вспом. нагревателя (MQTT: targetAirTemp), дефолт 10.0°C
+    doc["targetHysteresis"] = status.targetHysteresis; // гистерезис таргета хранения, константа ±0.5°C
+    doc["auxHysteresis"] = status.auxHysteresis;       // гистерезис таргета вспом. нагревателя, константа ±1.0°C
 
-    doc["radiatorAlarm"] = radiatorAlarmToString(status.radiatorAlarm);
+    doc["radiatorAlarm"] = radiatorAlarmToString(status.radiatorAlarm); // "NORMAL"/"FAN_FAULT"/"OVERTEMP" — эскалация §3.3
 
-    doc["uptimeSeconds"] = status.uptimeSeconds;
-    doc["freeHeapBytes"] = status.freeHeapBytes;
-    doc["rssiDbm"] = status.rssiDbm;
-    doc["wifiConnected"] = status.wifiConnected;
-    doc["mqttConnected"] = status.mqttConnected;
+    doc["uptimeSeconds"] = status.uptimeSeconds; // время с последней загрузки, секунды
+    doc["freeHeapBytes"] = status.freeHeapBytes; // свободная куча ESP8266, байты — индикатор утечек памяти
+    doc["rssiDbm"] = status.rssiDbm;             // уровень сигнала WiFi, дБм (отрицательное число, ближе к 0 — сильнее)
+    doc["wifiConnected"] = status.wifiConnected; // подключение к WiFi (есть IP)
+    doc["mqttConnected"] = status.mqttConnected; // подключение к MQTT-брокеру
 
     serializeJson(doc, outBuffer, bufferSize);
 }
