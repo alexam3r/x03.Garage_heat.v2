@@ -1932,27 +1932,27 @@ Task 9 в `loop()` про WiFi-реконнект удалён — эту отв
 - Consumes: everything built in Tasks 1–16.
 - Produces: nothing (terminal task of this plan).
 
-- [ ] **Step 1: Confirm `include/secrets.h` exists locally with real (or placeholder) broker credentials**
+- [x] **Step 1: Confirm `include/secrets.h` exists locally with real (or placeholder) broker credentials**
 
 Run: `test -f include/secrets.h && echo "exists"`
 Expected: `exists` (created back in Task 9, Step 2; if missing, re-run `cp include/secrets.h.example include/secrets.h` and fill in real WiFi/MQTT credentials before flashing real hardware)
 
-- [ ] **Step 2: Run the full native test suite one more time**
+- [x] **Step 2: Run the full native test suite one more time**
 
 Run: `pio test -e native`
 Expected: `37 Tests 0 Failures 0 Ignored` — `PASSED`
 
-- [ ] **Step 3: Run the full esp8266 build one more time**
+- [x] **Step 3: Run the full esp8266 build one more time**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 4: Confirm `include/secrets.h` was never staged**
+- [x] **Step 4: Confirm `include/secrets.h` was never staged**
 
 Run: `git status --porcelain include/secrets.h`
 Expected: no output (file is gitignored, working tree clean with respect to it)
 
-- [ ] **Step 5: Confirm nothing untracked remains outside `.pio/` and `include/secrets.h`**
+- [x] **Step 5: Confirm nothing untracked remains outside `.pio/` and `include/secrets.h`**
 
 Run: `git status --porcelain`
 Expected: empty output (everything from Tasks 1–16 already committed)
@@ -1960,6 +1960,12 @@ Expected: empty output (everything from Tasks 1–16 already committed)
 No commit in this task — it is verification-only. If Step 5 shows uncommitted changes, they belong to an earlier task that was not committed; go back and commit them under that task's message before proceeding to hardware bring-up.
 
 **ROM addresses done (2026-07-13):** the three DS18b20 on bus D3 were read with `tools/scan_ds18b20` and `include/config.h` now has real values (CLAUDE.md §2/§7) — the only hardware-dependent step this plan could not close in advance is now resolved.
+
+**Статус: выполнено.** Все 5 шагов проверены: `include/secrets.h` существует локально;
+native — `37 Tests 0 Failures 0 Ignored`, `PASSED`; esp8266 — `SUCCESS` (RAM 35.9%/
+Flash 27.9%); `git status --porcelain include/secrets.h` и `git status --porcelain`
+оба пустые — `secrets.h` не отслеживается и никогда не стейджился, untracked-файлов
+вне `.pio/` не осталось. Реализация всех 17 задач плана завершена.
 
 ---
 
