@@ -381,9 +381,20 @@ test/
 tools/
   scan_ds18b20/           — отдельный скетч для съёма ROM-адресов
 docs/                     — легаси Lua-скрипты первой версии прошивки, дизайн-док
+homeassistant/
+  garage_heat.yaml        — интеграция с Home Assistant через MQTT (см. ниже)
 CLAUDE.md                 — техническое задание
 progress.md                — TDD-план реализации по задачам, статус, self-review
 ```
+
+## Home Assistant
+
+Готовый YAML-файл для статической (не через MQTT Discovery) интеграции —
+[`homeassistant/garage_heat.yaml`](homeassistant/garage_heat.yaml). Все сенсоры,
+бинарные сенсоры (состояния выходов), два переключателя (`fanHeater`,
+`calorifer`), три числовых таргета (`targetSensorTemp`, `SensorTempDiff`,
+`targetAirTemp`) и кнопка перезапуска — сгруппированы в одно устройство HA.
+Инструкция по подключению — комментарием в начале самого файла.
 
 ## Вне рамок проекта
 
