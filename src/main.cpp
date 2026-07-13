@@ -44,6 +44,12 @@ static bool fanHeaterEnabled = false;
 static float targetSensorTemp = DEFAULT_TARGET_STORAGE_TEMP;
 static float sensorTempDiff = DEFAULT_SENSOR_TEMP_DIFF;
 
+static AuxHeaterState auxHeaterLogicalState = AuxHeaterState::OFF;
+static RadiatorAlarmState radiatorAlarmState = RadiatorAlarmState::NORMAL;
+
+static bool caloriferEnabled = false;
+static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
+
 static bool cannonFanState = false;
 static bool cannonElementState = false;
 static bool auxHeaterState = false;
@@ -206,6 +212,24 @@ static void dutyAdaptTick() {
     loadOffLimit = limits.loadOffLimit;
 }
 
+static void auxHeaterTick() {
+    if (radiatorAlarmState != RadiatorAlarmState::NORMAL || !caloriferEnabled || !outdoorValid) {
+        if (auxHeaterLogicalState != AuxHeaterState::OFF) {
+            setAuxHeater(false);
+            auxHeaterLogicalState = AuxHeaterState::OFF;
+        }
+        return;
+    }
+
+    if (auxHeaterLogicalState == AuxHeaterState::ON && shouldAuxHeaterTurnOff(outdoorTemp, targetAirTemp, TARGET_AUX_AIR_HYSTERESIS)) {
+        setAuxHeater(false);
+        auxHeaterLogicalState = AuxHeaterState::OFF;
+    } else if (auxHeaterLogicalState == AuxHeaterState::OFF && shouldAuxHeaterTurnOn(outdoorTemp, targetAirTemp, TARGET_AUX_AIR_HYSTERESIS)) {
+        setAuxHeater(true);
+        auxHeaterLogicalState = AuxHeaterState::ON;
+    }
+}
+
 void setup() {
     safeInitOutputs();
     Serial.begin(115200);
@@ -229,4 +253,5 @@ void loop() {
     radiatorSensorTick();
     heaterTick();
     dutyAdaptTick();
+    auxHeaterTick();
 }
