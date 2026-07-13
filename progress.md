@@ -1830,13 +1830,13 @@ Flash 27.8%), native-тесты не затронуты (37/37 PASSED). Откл
 - Consumes: `shouldRestartForWatchdog` (Task 7).
 - Produces: nothing consumed by later tasks (final safety wiring).
 
-- [ ] **Step 1: Add the watchdog timestamp global** (insert alongside other globals)
+- [x] **Step 1: Add the watchdog timestamp global** (insert alongside other globals)
 
 ```cpp
 static unsigned long lastFullyConnectedMillis = 0;
 ```
 
-- [ ] **Step 2: Add the watchdog tick** (insert before `setup()`)
+- [x] **Step 2: Add the watchdog tick** (insert before `setup()`)
 
 ```cpp
 static void connectivityWatchdogTick() {
@@ -1858,7 +1858,7 @@ static void connectivityWatchdogTick() {
 }
 ```
 
-- [ ] **Step 3: Initialize the timestamp in `setup()` and call the tick from `loop()`**
+- [x] **Step 3: Initialize the timestamp in `setup()` and call the tick from `loop()`**
 
 ```cpp
 void setup() {
@@ -1896,12 +1896,12 @@ void loop() {
 
 (This step also removes the placeholder `if (WiFi.status() != WL_CONNECTED) { ... }` comment block left over from Task 9 — the watchdog tick now owns that responsibility.)
 
-- [ ] **Step 4: Verify the esp8266 environment compiles**
+- [x] **Step 4: Verify the esp8266 environment compiles**
 
 Run: `pio run -e esp8266`
 Expected: `SUCCESS`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/main.cpp
@@ -1914,6 +1914,11 @@ git commit -m "$(cat <<'EOF'
 EOF
 )"
 ```
+
+**Статус: выполнено.** Коммит `50ad5ea`. esp8266 собирается (`SUCCESS`, RAM 35.9%/
+Flash 27.9%), native-тесты не затронуты (37/37 PASSED). Плейсхолдер-комментарий из
+Task 9 в `loop()` про WiFi-реконнект удалён — эту ответственность теперь несёт
+`connectivityWatchdogTick()`.
 
 ---
 
