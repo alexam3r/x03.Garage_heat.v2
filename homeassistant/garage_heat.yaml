@@ -6,11 +6,11 @@
 # YAML в другом месте. Этот файл описывает только сущности garage-heat-v2,
 # без брокера.
 #
-# Файл уже содержит top-level ключ `mqtt:` (см. ниже) — это осознанно, чтобы
-# избежать ошибки "required key 'platform' not provided": если top-level
-# ключи файла (sensor:/switch:/...) не обёрнуты в `mqtt:` при подключении,
-# HA валидирует их по СТАРОЙ platform-based схеме (`platform: mqtt` в каждой
-# записи), которой тут нет, — именно так эта ошибка и возникает.
+# Файл уже содержит top-level ключ `mqtt:` (обязательно) — если top-level
+# ключи файла (sensor:/switch:/...) не обёрнуты в `mqtt:` при подключении, HA
+# провалидирует их по устаревшей platform-based схеме (`platform: mqtt` в
+# каждой записи), которой тут нет, и откажет с ошибкой "required key
+# 'platform' not provided".
 #
 # Подключение — через packages (безопасно даже если `mqtt:` уже используется
 # где-то ещё в вашей конфигурации, HA сливает несколько блоков `mqtt:` из
@@ -20,13 +20,21 @@
 #     packages:
 #       garage_heat: !include homeassistant/garage_heat.yaml
 #
+# Схема топиков (CLAUDE.md §4): единого JSON-статуса нет — каждая величина
+# публикуется в свой собственный топик. У управляемых величин — пара
+# `.../set` (команда, подписка устройства) и `.../state` (подтверждённое
+# устройством значение, публикация с retain, обновляется сразу по приёму
+# команды и раз в минуту как heartbeat). У чисто телеметрийных величин
+# (сенсоры, физическое состояние выходов, диагностика) — только `.../state`.
+# Полезное следствие: значения публикуются как простой текст (не JSON), а
+# булевы — буквально как "ON"/"OFF", поэтому ниже почти не нужны
+# value_template (раньше значения приходилось доставать из общего JSON и
+# разбираться с тем, что ArduinoJson сериализует bool как Python "True"/
+# "False" при обращении через value_json — этой проблемы больше нет).
+#
 # Топики и семантика — CLAUDE.md §2/§4, README.md разделы «Управление» и
 # «Логика регулирования: нюансы поведения» в репозитории прошивки.
 #
-# Про переключатели: начиная с версии прошивки, публикующей fanHeaterEnabled/
-# caloriferEnabled в garage/heat/status (см. README/CLAUDE.md §4), switch-
-# сущности ниже читают реальное состояние MQTT-флага из статуса
-# (state_topic + value_template), а не полагаются на optimistic-режим.
 # retain: true на командных топиках нужен, чтобы после ESP.restart() (ручного
 # или по watchdog) устройство при переподписке получило от брокера последнее
 # заданное значение, а не сбросилось к дефолтам из config.h.
@@ -40,8 +48,7 @@ mqtt:
   sensor:
     - name: "Температура обдува пушки (BLOWN_AIR)"
       unique_id: garage_heat_blown_air_temp
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.blownAirTemp }}"
+      state_topic: "garage/heat/blownAirTemp/state"
       device_class: temperature
       unit_of_measurement: "°C"
       state_class: measurement
@@ -58,8 +65,7 @@ mqtt:
 
     - name: "Температура хранения (TARGET)"
       unique_id: garage_heat_target_temp
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.targetTemp }}"
+      state_topic: "garage/heat/targetTemp/state"
       device_class: temperature
       unit_of_measurement: "°C"
       state_class: measurement
@@ -68,8 +74,7 @@ mqtt:
 
     - name: "Температура (доп. датчик INFO)"
       unique_id: garage_heat_info_temp
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.infoTemp }}"
+      state_topic: "garage/heat/infoTemp/state"
       device_class: temperature
       unit_of_measurement: "°C"
       state_class: measurement
@@ -78,8 +83,7 @@ mqtt:
 
     - name: "Уличная температура"
       unique_id: garage_heat_outdoor_temp
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.outdoorTemp }}"
+      state_topic: "garage/heat/outdoorTemp/state"
       device_class: temperature
       unit_of_measurement: "°C"
       state_class: measurement
@@ -88,8 +92,7 @@ mqtt:
 
     - name: "Температура радиатора SSR"
       unique_id: garage_heat_radiator_temp
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.radiatorTemp }}"
+      state_topic: "garage/heat/radiatorTemp/state"
       device_class: temperature
       unit_of_measurement: "°C"
       state_class: measurement
@@ -98,16 +101,32 @@ mqtt:
 
     - name: "Авария радиатора"
       unique_id: garage_heat_radiator_alarm
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.radiatorAlarm }}"
+      state_topic: "garage/heat/radiatorAlarm/state"
       icon: mdi:alert-octagon-outline
+      availability: *availability
+      device: *device
+
+    - name: "Гистерезис таргета хранения"
+      unique_id: garage_heat_target_hysteresis
+      state_topic: "garage/heat/targetHysteresis/state"
+      unit_of_measurement: "°C"
+      entity_category: diagnostic
+      icon: mdi:delta
+      availability: *availability
+      device: *device
+
+    - name: "Гистерезис таргета вспом. нагревателя"
+      unique_id: garage_heat_aux_hysteresis
+      state_topic: "garage/heat/auxHysteresis/state"
+      unit_of_measurement: "°C"
+      entity_category: diagnostic
+      icon: mdi:delta
       availability: *availability
       device: *device
 
     - name: "Аптайм"
       unique_id: garage_heat_uptime
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.uptimeSeconds }}"
+      state_topic: "garage/heat/uptimeSeconds/state"
       device_class: duration
       unit_of_measurement: "s"
       entity_category: diagnostic
@@ -117,8 +136,7 @@ mqtt:
 
     - name: "Свободная память (heap)"
       unique_id: garage_heat_free_heap
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.freeHeapBytes }}"
+      state_topic: "garage/heat/freeHeapBytes/state"
       unit_of_measurement: "B"
       entity_category: diagnostic
       icon: mdi:memory
@@ -127,8 +145,7 @@ mqtt:
 
     - name: "Уровень сигнала WiFi"
       unique_id: garage_heat_rssi
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.rssiDbm }}"
+      state_topic: "garage/heat/rssiDbm/state"
       device_class: signal_strength
       unit_of_measurement: "dBm"
       state_class: measurement
@@ -139,58 +156,43 @@ mqtt:
   binary_sensor:
     - name: "Вентилятор тепловой пушки (D5)"
       unique_id: garage_heat_fan_on
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.fanOn }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/fanOn/state"
       icon: mdi:fan
       availability: *availability
       device: *device
 
     - name: "Нагревательный элемент пушки (D6)"
       unique_id: garage_heat_element_on
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.elementOn }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/elementOn/state"
       device_class: heat
       availability: *availability
       device: *device
 
     - name: "Вспомогательный нагреватель, физическое состояние (D7)"
       unique_id: garage_heat_aux_on
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.auxOn }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/auxOn/state"
       device_class: heat
       availability: *availability
       device: *device
 
     - name: "Вентилятор охлаждения радиатора (D8)"
       unique_id: garage_heat_radiator_fan_on
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.radiatorFanOn }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/radiatorFanOn/state"
       icon: mdi:fan-alert
       availability: *availability
       device: *device
 
     - name: "Авария радиатора (проблема)"
       unique_id: garage_heat_radiator_problem
-      state_topic: "garage/heat/status"
-      value_template: "{{ 'ON' if value_json.radiatorAlarm != 'NORMAL' else 'OFF' }}"
+      state_topic: "garage/heat/radiatorAlarm/state"
+      value_template: "{{ 'ON' if value != 'NORMAL' else 'OFF' }}"
       device_class: problem
       availability: *availability
       device: *device
 
     - name: "WiFi подключен"
       unique_id: garage_heat_wifi_connected
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.wifiConnected }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/wifiConnected/state"
       device_class: connectivity
       entity_category: diagnostic
       availability: *availability
@@ -198,10 +200,7 @@ mqtt:
 
     - name: "MQTT подключен"
       unique_id: garage_heat_mqtt_connected
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.mqttConnected }}"
-      payload_on: "True"
-      payload_off: "False"
+      state_topic: "garage/heat/mqttConnected/state"
       device_class: connectivity
       entity_category: diagnostic
       availability: *availability
@@ -210,13 +209,8 @@ mqtt:
   switch:
     - name: "Тепловая пушка"
       unique_id: garage_heat_fan_heater_switch
-      command_topic: "garage/heat/fanHeater"
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.fanHeaterEnabled }}"
-      payload_on: "ON"
-      payload_off: "OFF"
-      state_on: "True"
-      state_off: "False"
+      command_topic: "garage/heat/fanHeater/set"
+      state_topic: "garage/heat/fanHeater/state"
       retain: true
       icon: mdi:air-conditioner
       availability: *availability
@@ -224,13 +218,8 @@ mqtt:
 
     - name: "Вспомогательный нагреватель (calorifer)"
       unique_id: garage_heat_calorifer_switch
-      command_topic: "garage/heat/calorifer"
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.caloriferEnabled }}"
-      payload_on: "ON"
-      payload_off: "OFF"
-      state_on: "True"
-      state_off: "False"
+      command_topic: "garage/heat/calorifer/set"
+      state_topic: "garage/heat/calorifer/state"
       retain: true
       icon: mdi:radiator
       availability: *availability
@@ -239,9 +228,8 @@ mqtt:
   number:
     - name: "Целевая температура хранения"
       unique_id: garage_heat_target_sensor_temp_number
-      command_topic: "garage/heat/targetSensorTemp"
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.targetSensorTemp }}"
+      command_topic: "garage/heat/targetSensorTemp/set"
+      state_topic: "garage/heat/targetSensorTemp/state"
       retain: true
       min: -10
       max: 30
@@ -252,11 +240,10 @@ mqtt:
       availability: *availability
       device: *device
 
-    - name: "Порог адаптации duty-цикла (SensorTempDiff)"
+    - name: "Порог адаптации duty-цикла (sensorTempDiff)"
       unique_id: garage_heat_sensor_temp_diff_number
-      command_topic: "garage/heat/SensorTempDiff"
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.sensorTempDiff }}"
+      command_topic: "garage/heat/sensorTempDiff/set"
+      state_topic: "garage/heat/sensorTempDiff/state"
       retain: true
       min: 5
       max: 50
@@ -269,9 +256,8 @@ mqtt:
 
     - name: "Целевая температура воздуха (calorifer)"
       unique_id: garage_heat_target_air_temp_number
-      command_topic: "garage/heat/targetAirTemp"
-      state_topic: "garage/heat/status"
-      value_template: "{{ value_json.targetAirTemp }}"
+      command_topic: "garage/heat/targetAirTemp/set"
+      state_topic: "garage/heat/targetAirTemp/state"
       retain: true
       min: -20
       max: 20
@@ -285,7 +271,7 @@ mqtt:
   button:
     - name: "Перезагрузка устройства"
       unique_id: garage_heat_restart_button
-      command_topic: "garage/heat/restart"
+      command_topic: "garage/heat/restart/set"
       payload_press: "1"
       device_class: restart
       entity_category: config

@@ -48,24 +48,55 @@
 // === Периоды опроса/публикации ===
 #define FAST_SENSOR_POLL_PERIOD_MS    5000UL
 #define DUTY_ADAPT_CHECK_PERIOD_MS    10000UL
-#define MQTT_STATUS_PERIOD_MS         60000UL
+#define MQTT_STATE_PUBLISH_PERIOD_MS  60000UL   // период полной перепубликации всех .../state (CLAUDE.md §4)
 #define MQTT_RECONNECT_PERIOD_MS      5000UL
 
 // === Watchdog связи (WiFi+MQTT), CLAUDE.md §3.5 ===
 #define WATCHDOG_TIMEOUT_MS           300000UL   // 5 минут
 
 // === MQTT (без ID устройства, корневой топик используется напрямую) ===
-#define MQTT_CLIENT_ID               "garage-heat-v2"
-#define MQTT_TOPIC_STATUS            "garage/heat/status"
-#define MQTT_TOPIC_STATE             "garage/heat/state"
-#define MQTT_TOPIC_DEBUG             "garage/heat/debug"
-#define MQTT_TOPIC_CMD_FAN_HEATER    "garage/heat/fanHeater"
-#define MQTT_TOPIC_CMD_TARGET_TEMP   "garage/heat/targetSensorTemp"
-#define MQTT_TOPIC_CMD_SENSOR_DIFF   "garage/heat/SensorTempDiff"
-#define MQTT_TOPIC_CMD_CALORIFER     "garage/heat/calorifer"
-#define MQTT_TOPIC_CMD_TARGET_AIR    "garage/heat/targetAirTemp"
-#define MQTT_TOPIC_CMD_RESTART       "garage/heat/restart"
+// Схема топиков (CLAUDE.md §4): у каждой управляемой величины — .../set (команда, подписка
+// устройства) и .../state (подтверждённое устройством значение, публикация с retain). У чисто
+// телеметрийных величин (сенсоры, физическое состояние выходов, диагностика) — только .../state.
+// Единого JSON-статуса больше нет — каждая величина публикуется в свой собственный топик.
+#define MQTT_CLIENT_ID                "garage-heat-v2"
+#define MQTT_TOPIC_STATE              "garage/heat/state"   // LWT/доступность устройства целиком, retain
+#define MQTT_TOPIC_DEBUG              "garage/heat/debug"
 
-// JSON-статус (~19 полей) превышает дефолтный MQTT_MAX_PACKET_SIZE (256 байт)
-// PubSubClient — без явного увеличения буфера publish() статуса молча провалится.
-#define MQTT_STATUS_BUFFER_SIZE      640
+// --- Управляемые величины: команда (.../set, подписка) + подтверждение (.../state, публикация) ---
+#define MQTT_TOPIC_FAN_HEATER_SET     "garage/heat/fanHeater/set"
+#define MQTT_TOPIC_FAN_HEATER_STATE   "garage/heat/fanHeater/state"
+#define MQTT_TOPIC_TARGET_TEMP_SET    "garage/heat/targetSensorTemp/set"
+#define MQTT_TOPIC_TARGET_TEMP_STATE  "garage/heat/targetSensorTemp/state"
+#define MQTT_TOPIC_SENSOR_DIFF_SET    "garage/heat/sensorTempDiff/set"
+#define MQTT_TOPIC_SENSOR_DIFF_STATE  "garage/heat/sensorTempDiff/state"
+#define MQTT_TOPIC_CALORIFER_SET      "garage/heat/calorifer/set"
+#define MQTT_TOPIC_CALORIFER_STATE    "garage/heat/calorifer/state"
+#define MQTT_TOPIC_TARGET_AIR_SET     "garage/heat/targetAirTemp/set"
+#define MQTT_TOPIC_TARGET_AIR_STATE   "garage/heat/targetAirTemp/state"
+#define MQTT_TOPIC_RESTART_SET        "garage/heat/restart/set"   // действие, состояния нет
+
+// --- Телеметрия: датчики температуры (§2) ---
+#define MQTT_TOPIC_BLOWN_AIR_STATE     "garage/heat/blownAirTemp/state"
+#define MQTT_TOPIC_TARGET_STATE        "garage/heat/targetTemp/state"
+#define MQTT_TOPIC_INFO_STATE          "garage/heat/infoTemp/state"
+#define MQTT_TOPIC_OUTDOOR_STATE       "garage/heat/outdoorTemp/state"
+#define MQTT_TOPIC_RADIATOR_TEMP_STATE "garage/heat/radiatorTemp/state"
+#define MQTT_TOPIC_RADIATOR_ALARM_STATE "garage/heat/radiatorAlarm/state"   // "NORMAL"/"FAN_FAULT"/"OVERTEMP"
+
+// --- Телеметрия: физическое состояние силовых выходов (§1) ---
+#define MQTT_TOPIC_FAN_ON_STATE          "garage/heat/fanOn/state"
+#define MQTT_TOPIC_ELEMENT_ON_STATE      "garage/heat/elementOn/state"
+#define MQTT_TOPIC_AUX_ON_STATE          "garage/heat/auxOn/state"
+#define MQTT_TOPIC_RADIATOR_FAN_ON_STATE "garage/heat/radiatorFanOn/state"
+
+// --- Телеметрия: константы гистерезиса (для наблюдаемости, по MQTT не изменяются) ---
+#define MQTT_TOPIC_TARGET_HYSTERESIS_STATE "garage/heat/targetHysteresis/state"
+#define MQTT_TOPIC_AUX_HYSTERESIS_STATE    "garage/heat/auxHysteresis/state"
+
+// --- Телеметрия: диагностика устройства ---
+#define MQTT_TOPIC_UPTIME_STATE          "garage/heat/uptimeSeconds/state"
+#define MQTT_TOPIC_FREE_HEAP_STATE       "garage/heat/freeHeapBytes/state"
+#define MQTT_TOPIC_RSSI_STATE            "garage/heat/rssiDbm/state"
+#define MQTT_TOPIC_WIFI_CONNECTED_STATE  "garage/heat/wifiConnected/state"
+#define MQTT_TOPIC_MQTT_CONNECTED_STATE  "garage/heat/mqttConnected/state"

@@ -91,7 +91,7 @@ static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static unsigned long lastMqttReconnectAttempt = 0;
 
-static unsigned long lastStatusPublish = 0;
+static unsigned long lastStatePublish = 0;
 static unsigned long lastFullyConnectedMillis = 0;
 
 static bool cannonFanState = false;
@@ -215,6 +215,41 @@ static void radiatorSensorTick() {
     radiatorConversionPending = true;
 }
 
+// Публикация одного скалярного значения в свой топик .../state, retain=true (CLAUDE.md §4).
+// Формат — простой текст, не JSON: топики теперь по одному на величину, обёртка не нужна.
+
+static void publishFloatState(const char* topic, bool valid, float value) {
+    char buf[16];
+    if (valid) {
+        snprintf(buf, sizeof(buf), "%.1f", value);
+    } else {
+        // HA MQTT sensor: payload "None" переводит сущность в состояние unknown (проверено
+        // по документации интеграции mqtt.sensor) — так сигналим отвалившийся датчик.
+        strcpy(buf, "None");
+    }
+    mqttClient.publish(topic, buf, true);
+}
+
+static void publishBoolState(const char* topic, bool value) {
+    mqttClient.publish(topic, value ? "ON" : "OFF", true);
+}
+
+static void publishULongState(const char* topic, unsigned long value) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "%lu", value);
+    mqttClient.publish(topic, buf, true);
+}
+
+static void publishIntState(const char* topic, int value) {
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%d", value);
+    mqttClient.publish(topic, buf, true);
+}
+
+static void publishStringState(const char* topic, const char* value) {
+    mqttClient.publish(topic, value, true);
+}
+
 static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char value[32];
     unsigned int copyLen = (length < sizeof(value) - 1) ? length : sizeof(value) - 1;
@@ -224,22 +259,27 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String topicStr(topic);
     DBG_PRINTF("MQTT cmd: %s = %s\n", topic, value);
 
-    if (topicStr == MQTT_TOPIC_CMD_FAN_HEATER) {
+    if (topicStr == MQTT_TOPIC_FAN_HEATER_SET) {
         fanHeaterEnabled = (strcmp(value, "ON") == 0);
-    } else if (topicStr == MQTT_TOPIC_CMD_TARGET_TEMP) {
+        publishBoolState(MQTT_TOPIC_FAN_HEATER_STATE, fanHeaterEnabled);
+    } else if (topicStr == MQTT_TOPIC_TARGET_TEMP_SET) {
         targetSensorTemp = atof(value);
-    } else if (topicStr == MQTT_TOPIC_CMD_SENSOR_DIFF) {
+        publishFloatState(MQTT_TOPIC_TARGET_TEMP_STATE, true, targetSensorTemp);
+    } else if (topicStr == MQTT_TOPIC_SENSOR_DIFF_SET) {
         float diff = atof(value);
         if (isValidSensorTempDiff(diff)) {
             sensorTempDiff = diff;
+            publishFloatState(MQTT_TOPIC_SENSOR_DIFF_STATE, true, sensorTempDiff);
         } else {
-            DBG_PRINTF("MQTT cmd: SensorTempDiff=%.1f rejected, out of range\n", diff);
+            DBG_PRINTF("MQTT cmd: sensorTempDiff=%.1f rejected, out of range\n", diff);
         }
-    } else if (topicStr == MQTT_TOPIC_CMD_CALORIFER) {
+    } else if (topicStr == MQTT_TOPIC_CALORIFER_SET) {
         caloriferEnabled = (strcmp(value, "ON") == 0);
-    } else if (topicStr == MQTT_TOPIC_CMD_TARGET_AIR) {
+        publishBoolState(MQTT_TOPIC_CALORIFER_STATE, caloriferEnabled);
+    } else if (topicStr == MQTT_TOPIC_TARGET_AIR_SET) {
         targetAirTemp = atof(value);
-    } else if (topicStr == MQTT_TOPIC_CMD_RESTART) {
+        publishFloatState(MQTT_TOPIC_TARGET_AIR_STATE, true, targetAirTemp);
+    } else if (topicStr == MQTT_TOPIC_RESTART_SET) {
         DBG_PRINTLN("MQTT cmd: restart requested, shutting down outputs");
         setElement(false);
         setFan(false);
@@ -247,6 +287,42 @@ static void mqttCallback(char* topic, byte* payload, unsigned int length) {
         setRadiatorFan(false);
         ESP.restart();
     }
+}
+
+// Полная перепубликация всех .../state — раз в MQTT_STATE_PUBLISH_PERIOD_MS (см. statePublishTick)
+// и сразу после (пере)подключения к брокеру (см. mqttReconnectTick), чтобы подписчики (Home
+// Assistant и т.п.) не ждали до минуты после реконнекта, чтобы увидеть актуальные значения.
+static void publishAllState() {
+    if (!mqttClient.connected()) return;
+
+    publishFloatState(MQTT_TOPIC_BLOWN_AIR_STATE, blownAirValid, blownAirTemp);
+    publishFloatState(MQTT_TOPIC_TARGET_STATE, targetValid, targetTemp);
+    publishFloatState(MQTT_TOPIC_INFO_STATE, infoValid, infoTemp);
+    publishFloatState(MQTT_TOPIC_OUTDOOR_STATE, outdoorValid, outdoorTemp);
+    publishFloatState(MQTT_TOPIC_RADIATOR_TEMP_STATE, radiatorValid, radiatorTemp);
+    publishStringState(MQTT_TOPIC_RADIATOR_ALARM_STATE, radiatorAlarmToString(radiatorAlarmState));
+
+    publishBoolState(MQTT_TOPIC_FAN_ON_STATE, cannonFanState);
+    publishBoolState(MQTT_TOPIC_ELEMENT_ON_STATE, cannonElementState);
+    publishBoolState(MQTT_TOPIC_AUX_ON_STATE, auxHeaterState);
+    publishBoolState(MQTT_TOPIC_RADIATOR_FAN_ON_STATE, radiatorFanState);
+
+    publishBoolState(MQTT_TOPIC_FAN_HEATER_STATE, fanHeaterEnabled);
+    publishBoolState(MQTT_TOPIC_CALORIFER_STATE, caloriferEnabled);
+
+    publishFloatState(MQTT_TOPIC_TARGET_TEMP_STATE, true, targetSensorTemp);
+    publishFloatState(MQTT_TOPIC_SENSOR_DIFF_STATE, true, sensorTempDiff);
+    publishFloatState(MQTT_TOPIC_TARGET_AIR_STATE, true, targetAirTemp);
+    publishFloatState(MQTT_TOPIC_TARGET_HYSTERESIS_STATE, true, TARGET_STORAGE_HYSTERESIS);
+    publishFloatState(MQTT_TOPIC_AUX_HYSTERESIS_STATE, true, TARGET_AUX_AIR_HYSTERESIS);
+
+    publishULongState(MQTT_TOPIC_UPTIME_STATE, millis() / 1000UL);
+    publishULongState(MQTT_TOPIC_FREE_HEAP_STATE, ESP.getFreeHeap());
+    publishIntState(MQTT_TOPIC_RSSI_STATE, WiFi.RSSI());
+    publishBoolState(MQTT_TOPIC_WIFI_CONNECTED_STATE, WiFi.status() == WL_CONNECTED);
+    publishBoolState(MQTT_TOPIC_MQTT_CONNECTED_STATE, true); // публикуем -> значит подключены
+
+    DBG_PRINTLN("state: published all topics");
 }
 
 static void mqttReconnectTick() {
@@ -264,12 +340,13 @@ static void mqttReconnectTick() {
     if (connected) {
         DBG_PRINTLN("MQTT: connected, subscribing to command topics");
         mqttClient.publish(MQTT_TOPIC_STATE, "ON", true);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_FAN_HEATER);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_TEMP);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_SENSOR_DIFF);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_CALORIFER);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_TARGET_AIR);
-        mqttClient.subscribe(MQTT_TOPIC_CMD_RESTART);
+        mqttClient.subscribe(MQTT_TOPIC_FAN_HEATER_SET);
+        mqttClient.subscribe(MQTT_TOPIC_TARGET_TEMP_SET);
+        mqttClient.subscribe(MQTT_TOPIC_SENSOR_DIFF_SET);
+        mqttClient.subscribe(MQTT_TOPIC_CALORIFER_SET);
+        mqttClient.subscribe(MQTT_TOPIC_TARGET_AIR_SET);
+        mqttClient.subscribe(MQTT_TOPIC_RESTART_SET);
+        publishAllState();
     } else {
         DBG_PRINTF("MQTT: connect failed, state=%d\n", mqttClient.state());
     }
@@ -411,46 +488,11 @@ static void auxHeaterTick() {
     }
 }
 
-static void statusPublishTick() {
+static void statePublishTick() {
     unsigned long now = millis();
-    if (now - lastStatusPublish < MQTT_STATUS_PERIOD_MS) return;
-    lastStatusPublish = now;
-
-    if (!mqttClient.connected()) return;
-
-    DeviceStatus status;
-    status.blownAirTemp = blownAirTemp; status.blownAirValid = blownAirValid;
-    status.targetTemp = targetTemp;     status.targetValid = targetValid;
-    status.infoTemp = infoTemp;         status.infoValid = infoValid;
-    status.outdoorTemp = outdoorTemp;   status.outdoorValid = outdoorValid;
-    status.radiatorTemp = radiatorTemp; status.radiatorValid = radiatorValid;
-
-    status.fanOn = cannonFanState;
-    status.elementOn = cannonElementState;
-    status.auxOn = auxHeaterState;
-    status.radiatorFanOn = radiatorFanState;
-
-    status.fanHeaterEnabled = fanHeaterEnabled;
-    status.caloriferEnabled = caloriferEnabled;
-
-    status.targetSensorTemp = targetSensorTemp;
-    status.sensorTempDiff = sensorTempDiff;
-    status.targetAirTemp = targetAirTemp;
-    status.targetHysteresis = TARGET_STORAGE_HYSTERESIS;
-    status.auxHysteresis = TARGET_AUX_AIR_HYSTERESIS;
-
-    status.radiatorAlarm = radiatorAlarmState;
-
-    status.uptimeSeconds = millis() / 1000UL;
-    status.freeHeapBytes = ESP.getFreeHeap();
-    status.rssiDbm = WiFi.RSSI();
-    status.wifiConnected = (WiFi.status() == WL_CONNECTED);
-    status.mqttConnected = mqttClient.connected();
-
-    char buffer[MQTT_STATUS_BUFFER_SIZE];
-    buildStatusJson(status, buffer, sizeof(buffer));
-    mqttClient.publish(MQTT_TOPIC_STATUS, buffer);
-    DBG_PRINTLN("status: published");
+    if (now - lastStatePublish < MQTT_STATE_PUBLISH_PERIOD_MS) return;
+    lastStatePublish = now;
+    publishAllState();
 }
 
 static void connectivityWatchdogTick() {
@@ -494,7 +536,6 @@ void setup() {
     sensorRadiator.begin();
     sensorRadiator.setWaitForConversion(false);
 
-    mqttClient.setBufferSize(MQTT_STATUS_BUFFER_SIZE);
     mqttClient.setServer(MQTT_BROKER, MQTT_PORT);
     mqttClient.setCallback(mqttCallback);
 
@@ -512,6 +553,6 @@ void loop() {
     heaterTick();
     dutyAdaptTick();
     auxHeaterTick();
-    statusPublishTick();
+    statePublishTick();
     connectivityWatchdogTick();
 }

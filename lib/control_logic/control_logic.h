@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stddef.h>
-
 // Автоматы состояний (CLAUDE.md §3.1, §3.2, §3.3)
 enum class HeaterState { OFF, FAN_STARTING, ELEMENT_DUTY_ON, ELEMENT_DUTY_OFF, COOLDOWN };
 enum class AuxHeaterState { OFF, ON };
@@ -50,38 +48,8 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& input);
 // Watchdog связи WiFi+MQTT (CLAUDE.md §3.5)
 bool shouldRestartForWatchdog(unsigned long lastFullyConnectedMillis, unsigned long nowMillis, unsigned long watchdogTimeoutMs);
 
-// Валидация входящей MQTT-команды SensorTempDiff (CLAUDE.md §4)
+// Валидация входящей MQTT-команды sensorTempDiff (CLAUDE.md §4)
 bool isValidSensorTempDiff(float diff);
 
-// Сборка JSON-статуса (CLAUDE.md §4)
-struct DeviceStatus {
-    float blownAirTemp;      bool blownAirValid;
-    float targetTemp;        bool targetValid;
-    float infoTemp;          bool infoValid;
-    float outdoorTemp;       bool outdoorValid;
-    float radiatorTemp;      bool radiatorValid;
-
-    bool fanOn;
-    bool elementOn;
-    bool auxOn;
-    bool radiatorFanOn;
-
-    bool fanHeaterEnabled;   // MQTT-флаг garage/heat/fanHeater — разрешение работы контура пушки
-    bool caloriferEnabled;   // MQTT-флаг garage/heat/calorifer — разрешение работы вспом. нагревателя
-
-    float targetSensorTemp;
-    float sensorTempDiff;
-    float targetAirTemp;
-    float targetHysteresis;
-    float auxHysteresis;
-
-    RadiatorAlarmState radiatorAlarm;
-
-    unsigned long uptimeSeconds;
-    unsigned long freeHeapBytes;
-    int rssiDbm;
-    bool wifiConnected;
-    bool mqttConnected;
-};
-
-void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferSize);
+// Строковое представление RadiatorAlarmState — топик garage/heat/radiatorAlarm/state (CLAUDE.md §4)
+const char* radiatorAlarmToString(RadiatorAlarmState state);
