@@ -430,6 +430,9 @@ static void statusPublishTick() {
     status.auxOn = auxHeaterState;
     status.radiatorFanOn = radiatorFanState;
 
+    status.fanHeaterEnabled = fanHeaterEnabled;
+    status.caloriferEnabled = caloriferEnabled;
+
     status.targetSensorTemp = targetSensorTemp;
     status.sensorTempDiff = sensorTempDiff;
     status.targetAirTemp = targetAirTemp;

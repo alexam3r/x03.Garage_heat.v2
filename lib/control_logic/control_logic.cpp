@@ -156,6 +156,9 @@ void buildStatusJson(const DeviceStatus& status, char* outBuffer, size_t bufferS
     doc["auxOn"] = status.auxOn;                 // выход D7: вспомогательный нагреватель
     doc["radiatorFanOn"] = status.radiatorFanOn; // выход D8: вентилятор охлаждения радиатора SSR
 
+    doc["fanHeaterEnabled"] = status.fanHeaterEnabled; // текущее значение MQTT-флага garage/heat/fanHeater (не физический выход D5/D6)
+    doc["caloriferEnabled"] = status.caloriferEnabled; // текущее значение MQTT-флага garage/heat/calorifer (не физический выход D7)
+
     doc["targetSensorTemp"] = status.targetSensorTemp; // текущий таргет хранения (MQTT: targetSensorTemp), дефолт 5.0°C
     doc["sensorTempDiff"] = status.sensorTempDiff;     // текущий порог адаптации duty-цикла (MQTT: SensorTempDiff), дефолт 15
     doc["targetAirTemp"] = status.targetAirTemp;       // текущий таргет вспом. нагревателя (MQTT: targetAirTemp), дефолт 10.0°C

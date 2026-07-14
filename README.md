@@ -271,6 +271,13 @@ mosquitto_sub -h <broker> -u <user> -P <pass> -t 'garage/heat/state' -v
   "auxOn": true,          // выход D7 — вспомогательный нагреватель
   "radiatorFanOn": false, // выход D8 — вентилятор охлаждения радиатора SSR
 
+  // текущее значение MQTT-флага garage/heat/fanHeater — разрешение работы контура пушки.
+  // Не то же самое, что fanOn/elementOn: флаг может быть true, а выходы выключены
+  // (например, TARGET уже прогрет или идёт COOLDOWN); нужен, чтобы HA-переключатель
+  // отражал реальное состояние команды, а не последнее отправленное значение (optimistic)
+  "fanHeaterEnabled": true,
+  "caloriferEnabled": false, // то же самое для garage/heat/calorifer
+
   "targetSensorTemp": 5.0,  // текущий таргет хранения (команда targetSensorTemp), дефолт 5.0°C
   "sensorTempDiff": 15,     // текущий порог адаптации duty-цикла (команда SensorTempDiff), дефолт 15
   "targetAirTemp": 10.0,    // текущий таргет вспом. нагревателя (команда targetAirTemp), дефолт 10.0°C
@@ -394,7 +401,23 @@ progress.md                — TDD-план реализации по задач
 бинарные сенсоры (состояния выходов), два переключателя (`fanHeater`,
 `calorifer`), три числовых таргета (`targetSensorTemp`, `SensorTempDiff`,
 `targetAirTemp`) и кнопка перезапуска — сгруппированы в одно устройство HA.
-Инструкция по подключению — комментарием в начале самого файла.
+
+Файл сам начинается с top-level ключа `mqtt:` (обязательно — иначе HA
+провалидирует сущности по устаревшей `platform:`-схеме и отклонит конфиг с
+ошибкой `required key 'platform' not provided`) и подключается через
+`packages` — это безопасно, даже если ключ `mqtt:` уже используется где-то
+ещё в вашей конфигурации:
+
+```yaml
+homeassistant:
+  packages:
+    garage_heat: !include homeassistant/garage_heat.yaml
+```
+
+Переключатели читают реальное состояние MQTT-флага из `fanHeaterEnabled`/
+`caloriferEnabled` в `garage/heat/status` (см. «Телеметрия» выше), а не
+работают в optimistic-режиме — прошивка публикует эти поля начиная с
+текущей версии.
 
 ## Вне рамок проекта
 

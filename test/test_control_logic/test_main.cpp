@@ -211,6 +211,8 @@ void test_buildStatusJson_roundtrips_all_fields(void) {
     status.elementOn = false;
     status.auxOn = true;
     status.radiatorFanOn = false;
+    status.fanHeaterEnabled = true;
+    status.caloriferEnabled = false;
     status.targetSensorTemp = 5.0f;
     status.sensorTempDiff = 15.0f;
     status.targetAirTemp = 10.0f;
@@ -234,6 +236,8 @@ void test_buildStatusJson_roundtrips_all_fields(void) {
     TEST_ASSERT_TRUE(parsed["infoTemp"].isNull());
     TEST_ASSERT_TRUE(parsed["fanOn"].as<bool>());
     TEST_ASSERT_FALSE(parsed["elementOn"].as<bool>());
+    TEST_ASSERT_TRUE(parsed["fanHeaterEnabled"].as<bool>());
+    TEST_ASSERT_FALSE(parsed["caloriferEnabled"].as<bool>());
     TEST_ASSERT_EQUAL_STRING("NORMAL", parsed["radiatorAlarm"].as<const char*>());
     TEST_ASSERT_EQUAL_UINT32(12345UL, parsed["uptimeSeconds"].as<unsigned long>());
     TEST_ASSERT_TRUE(parsed["mqttConnected"].as<bool>());

@@ -66,6 +66,9 @@ struct DeviceStatus {
     bool auxOn;
     bool radiatorFanOn;
 
+    bool fanHeaterEnabled;   // MQTT-флаг garage/heat/fanHeater — разрешение работы контура пушки
+    bool caloriferEnabled;   // MQTT-флаг garage/heat/calorifer — разрешение работы вспом. нагревателя
+
     float targetSensorTemp;
     float sensorTempDiff;
     float targetAirTemp;
