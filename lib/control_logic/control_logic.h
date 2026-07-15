@@ -34,6 +34,7 @@ struct RadiatorInput {
     unsigned long fanOnSince;      // 0 = вентилятор сейчас не включён
     bool fanWasOn;                 // состояние D8 до этого вызова
     RadiatorAlarmState previousAlarm;
+    unsigned int consecutiveInvalidReads;  // подряд неудачных опросов датчика ДО этого вызова
 };
 
 struct RadiatorDecision {
@@ -41,6 +42,7 @@ struct RadiatorDecision {
     RadiatorAlarmState alarmState;
     bool forceLoadsOff;            // true -> main.cpp обязан выключить D5/D6/D7
     unsigned long fanOnSince;      // обновлённое значение, сохранить для следующего вызова
+    unsigned int consecutiveInvalidReads;  // обновлённый счётчик, сохранить для следующего вызова
 };
 
 RadiatorDecision evaluateRadiator(const RadiatorInput& input);

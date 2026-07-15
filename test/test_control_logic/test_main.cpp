@@ -1,5 +1,6 @@
 #include <unity.h>
 #include "control_logic.h"
+#include "config.h"
 
 void setUp(void) {}
 void tearDown(void) {}
@@ -93,7 +94,8 @@ void test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false(void) {
 
 static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now,
                                         unsigned long fanOnSince, bool fanWasOn,
-                                        RadiatorAlarmState prevAlarm) {
+                                        RadiatorAlarmState prevAlarm,
+                                        unsigned int consecutiveInvalidReads = 0U) {
     RadiatorInput in;
     in.radiatorTemp = temp;
     in.sensorValid = valid;
@@ -101,6 +103,7 @@ static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now
     in.fanOnSince = fanOnSince;
     in.fanWasOn = fanWasOn;
     in.previousAlarm = prevAlarm;
+    in.consecutiveInvalidReads = consecutiveInvalidReads;
     return in;
 }
 
@@ -151,8 +154,10 @@ void test_evaluateRadiator_critical_overtemp_forces_shutdown(void) {
     TEST_ASSERT_TRUE(out.forceLoadsOff);
 }
 
-void test_evaluateRadiator_recovers_below_15c(void) {
-    RadiatorInput in = makeRadiatorInput(14.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::OVERTEMP);
+void test_evaluateRadiator_recovers_below_fan_on_temp(void) {
+    // Порог сброса совпадает с порогом включения вентилятора (RADIATOR_FAN_ON_TEMP, 30°C) —
+    // отдельного магического порога 15°C больше нет (не годится для тестирования летом).
+    RadiatorInput in = makeRadiatorInput(29.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::OVERTEMP);
     RadiatorDecision out = evaluateRadiator(in);
     TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::NORMAL, (int)out.alarmState);
     TEST_ASSERT_FALSE(out.forceLoadsOff);
@@ -160,18 +165,39 @@ void test_evaluateRadiator_recovers_below_15c(void) {
 }
 
 void test_evaluateRadiator_alarm_persists_above_recovery_threshold(void) {
-    RadiatorInput in = makeRadiatorInput(25.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::FAN_FAULT);
+    RadiatorInput in = makeRadiatorInput(31.0f, true, 200000UL, 0UL, false, RadiatorAlarmState::FAN_FAULT);
     RadiatorDecision out = evaluateRadiator(in);
     TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::FAN_FAULT, (int)out.alarmState);
     TEST_ASSERT_TRUE(out.forceLoadsOff);
 }
 
-void test_evaluateRadiator_sensor_failure_forces_shutdown(void) {
-    RadiatorInput in = makeRadiatorInput(0.0f, false, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+void test_evaluateRadiator_sensor_failure_single_glitch_does_not_escalate(void) {
+    // Один сбойный опрос (наводка на 1-Wire) не должен мгновенно эскалировать до OVERTEMP —
+    // только после RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT подряд неудачных опросов.
+    RadiatorInput in = makeRadiatorInput(0.0f, false, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL, 0U);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::NORMAL, (int)out.alarmState);
+    TEST_ASSERT_FALSE(out.forceLoadsOff);
+    TEST_ASSERT_TRUE(out.fanOn); // безопасный дефолт при неопределённости — вентилятор включён
+    TEST_ASSERT_EQUAL_UINT32(1U, out.consecutiveInvalidReads);
+}
+
+void test_evaluateRadiator_sensor_failure_forces_shutdown_after_debounce(void) {
+    // RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT-1 неудачных опросов уже накоплено — этот опрос
+    // добивает счётчик до порога и эскалирует до OVERTEMP.
+    RadiatorInput in = makeRadiatorInput(0.0f, false, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL,
+                                          RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT - 1U);
     RadiatorDecision out = evaluateRadiator(in);
     TEST_ASSERT_EQUAL_INT((int)RadiatorAlarmState::OVERTEMP, (int)out.alarmState);
     TEST_ASSERT_TRUE(out.forceLoadsOff);
     TEST_ASSERT_TRUE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT, out.consecutiveInvalidReads);
+}
+
+void test_evaluateRadiator_sensor_valid_resets_invalid_counter(void) {
+    RadiatorInput in = makeRadiatorInput(20.0f, true, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL, 2U);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_EQUAL_UINT32(0U, out.consecutiveInvalidReads);
 }
 
 void test_shouldRestartForWatchdog_below_timeout_returns_false(void) {
@@ -239,9 +265,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_evaluateRadiator_fan_fault_after_min_runtime);
     RUN_TEST(test_evaluateRadiator_no_fault_before_min_runtime);
     RUN_TEST(test_evaluateRadiator_critical_overtemp_forces_shutdown);
-    RUN_TEST(test_evaluateRadiator_recovers_below_15c);
+    RUN_TEST(test_evaluateRadiator_recovers_below_fan_on_temp);
     RUN_TEST(test_evaluateRadiator_alarm_persists_above_recovery_threshold);
-    RUN_TEST(test_evaluateRadiator_sensor_failure_forces_shutdown);
+    RUN_TEST(test_evaluateRadiator_sensor_failure_single_glitch_does_not_escalate);
+    RUN_TEST(test_evaluateRadiator_sensor_failure_forces_shutdown_after_debounce);
+    RUN_TEST(test_evaluateRadiator_sensor_valid_resets_invalid_counter);
     RUN_TEST(test_shouldRestartForWatchdog_below_timeout_returns_false);
     RUN_TEST(test_shouldRestartForWatchdog_at_timeout_returns_true);
     RUN_TEST(test_isValidSensorTempDiff_in_range_returns_true);

@@ -72,20 +72,32 @@ bool shouldAuxHeaterTurnOff(float airTemp, float targetAirTemp, float hysteresis
 RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
     RadiatorDecision out;
 
-    // Отказ самого датчика радиатора не может остаться незамеченным — трактуем как критический
-    // перегрев без права на сомнение (не FAN_FAULT, сразу OVERTEMP).
+    // Отказ датчика радиатора — не сразу OVERTEMP: одиночный сбойный опрос (наводка на 1-Wire)
+    // не должен мгновенно эскалировать. Нужно RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT подряд
+    // неудачных опросов. До набора порога — безопасный дефолт (вентилятор включён), но без смены
+    // аварии.
     if (!in.sensorValid) {
+        unsigned int count = in.consecutiveInvalidReads + 1U;
         out.fanOn = true;
-        out.alarmState = RadiatorAlarmState::OVERTEMP;
-        out.forceLoadsOff = true;
-        out.fanOnSince = 0UL;
+        out.consecutiveInvalidReads = count;
+        if (count >= RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT) {
+            out.alarmState = RadiatorAlarmState::OVERTEMP;
+            out.forceLoadsOff = true;
+            out.fanOnSince = 0UL;
+        } else {
+            out.alarmState = in.previousAlarm;
+            out.forceLoadsOff = (in.previousAlarm != RadiatorAlarmState::NORMAL);
+            out.fanOnSince = in.fanOnSince;
+        }
         return out;
     }
 
-    // Сброс аварии — автоматический, по остыванию ниже RADIATOR_RECOVERY_TEMP (15°C),
-    // без ручного MQTT-подтверждения (CLAUDE.md §0 решение 7).
+    // Сброс аварии — автоматический, по остыванию ниже RADIATOR_FAN_ON_TEMP (30°C, тот же порог,
+    // что включает вентилятор охлаждения) — без ручного MQTT-подтверждения (CLAUDE.md §0 решение
+    // 7). Достигается только валидным опросом (эта ветка выполняется лишь при in.sensorValid ==
+    // true, см. ранний return выше) — сбойный датчик сам по себе снять аварию не может.
     RadiatorAlarmState alarm = in.previousAlarm;
-    if (alarm != RadiatorAlarmState::NORMAL && in.radiatorTemp < RADIATOR_RECOVERY_TEMP) {
+    if (alarm != RadiatorAlarmState::NORMAL && in.radiatorTemp < RADIATOR_FAN_ON_TEMP) {
         alarm = RadiatorAlarmState::NORMAL;
     }
 
@@ -113,6 +125,7 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
     out.alarmState = alarm;
     out.forceLoadsOff = (alarm != RadiatorAlarmState::NORMAL); // любая авария — обе нагрузки на радиаторе гасятся
     out.fanOnSince = fanOnSince;
+    out.consecutiveInvalidReads = 0U; // валидное чтение — счётчик сбойных опросов сбрасывается
     return out;
 }
 

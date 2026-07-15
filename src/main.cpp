@@ -86,6 +86,7 @@ static bool caloriferEnabled = false;
 static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
 
 static unsigned long radiatorFanOnSince = 0;
+static unsigned int radiatorConsecutiveInvalidReads = 0;
 
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
@@ -325,6 +326,78 @@ static void publishAllState() {
     DBG_PRINTLN("state: published all topics");
 }
 
+// Критичные топики (CLAUDE.md §4) публикуются немедленно при изменении значения, а не только раз
+// в минуту как остальные (heartbeat, см. statePublishTick/publishAllState) — минутная задержка
+// неприемлема для аварийных сигналов и состояния силовых выходов. Сравнение со "снимком"
+// последнего опубликованного значения на каждой итерации loop(). mqttConnected/state сюда
+// намеренно не включён: эта функция и так публикует только когда клиент подключён (см. guard
+// ниже), а сам факт (пере)подключения уже покрыт немедленной publishAllState() в
+// mqttReconnectTick() и LWT (garage/heat/state).
+static void publishCriticalStateIfChanged() {
+    if (!mqttClient.connected()) return;
+
+    static RadiatorAlarmState lastRadiatorAlarm = RadiatorAlarmState::NORMAL;
+    static bool lastRadiatorValid = false;
+    static float lastRadiatorTemp = NAN;
+    static bool lastFanOn = false;
+    static bool lastElementOn = false;
+    static bool lastAuxOn = false;
+    static bool lastRadiatorFanOn = false;
+    static bool lastTargetValid = false;
+    static float lastTargetTemp = NAN;
+    static bool lastBlownAirValid = false;
+    static float lastBlownAirTemp = NAN;
+    static bool lastOutdoorValid = false;
+    static float lastOutdoorTemp = NAN;
+    static bool lastWifiConnected = false;
+
+    if (radiatorAlarmState != lastRadiatorAlarm) {
+        publishStringState(MQTT_TOPIC_RADIATOR_ALARM_STATE, radiatorAlarmToString(radiatorAlarmState));
+        lastRadiatorAlarm = radiatorAlarmState;
+    }
+    if (radiatorValid != lastRadiatorValid || (radiatorValid && radiatorTemp != lastRadiatorTemp)) {
+        publishFloatState(MQTT_TOPIC_RADIATOR_TEMP_STATE, radiatorValid, radiatorTemp);
+        lastRadiatorValid = radiatorValid;
+        lastRadiatorTemp = radiatorTemp;
+    }
+    if (cannonFanState != lastFanOn) {
+        publishBoolState(MQTT_TOPIC_FAN_ON_STATE, cannonFanState);
+        lastFanOn = cannonFanState;
+    }
+    if (cannonElementState != lastElementOn) {
+        publishBoolState(MQTT_TOPIC_ELEMENT_ON_STATE, cannonElementState);
+        lastElementOn = cannonElementState;
+    }
+    if (auxHeaterState != lastAuxOn) {
+        publishBoolState(MQTT_TOPIC_AUX_ON_STATE, auxHeaterState);
+        lastAuxOn = auxHeaterState;
+    }
+    if (radiatorFanState != lastRadiatorFanOn) {
+        publishBoolState(MQTT_TOPIC_RADIATOR_FAN_ON_STATE, radiatorFanState);
+        lastRadiatorFanOn = radiatorFanState;
+    }
+    if (targetValid != lastTargetValid || (targetValid && targetTemp != lastTargetTemp)) {
+        publishFloatState(MQTT_TOPIC_TARGET_STATE, targetValid, targetTemp);
+        lastTargetValid = targetValid;
+        lastTargetTemp = targetTemp;
+    }
+    if (blownAirValid != lastBlownAirValid || (blownAirValid && blownAirTemp != lastBlownAirTemp)) {
+        publishFloatState(MQTT_TOPIC_BLOWN_AIR_STATE, blownAirValid, blownAirTemp);
+        lastBlownAirValid = blownAirValid;
+        lastBlownAirTemp = blownAirTemp;
+    }
+    if (outdoorValid != lastOutdoorValid || (outdoorValid && outdoorTemp != lastOutdoorTemp)) {
+        publishFloatState(MQTT_TOPIC_OUTDOOR_STATE, outdoorValid, outdoorTemp);
+        lastOutdoorValid = outdoorValid;
+        lastOutdoorTemp = outdoorTemp;
+    }
+    bool wifiConnected = (WiFi.status() == WL_CONNECTED);
+    if (wifiConnected != lastWifiConnected) {
+        publishBoolState(MQTT_TOPIC_WIFI_CONNECTED_STATE, wifiConnected);
+        lastWifiConnected = wifiConnected;
+    }
+}
+
 static void mqttReconnectTick() {
     if (mqttClient.connected()) return;
 
@@ -360,6 +433,7 @@ static void radiatorEscalationTick() {
     in.fanOnSince = radiatorFanOnSince;
     in.fanWasOn = radiatorFanState;
     in.previousAlarm = radiatorAlarmState;
+    in.consecutiveInvalidReads = radiatorConsecutiveInvalidReads;
 
     RadiatorDecision decision = evaluateRadiator(in);
 
@@ -370,6 +444,7 @@ static void radiatorEscalationTick() {
     }
     radiatorAlarmState = decision.alarmState;
     radiatorFanOnSince = decision.fanOnSince;
+    radiatorConsecutiveInvalidReads = decision.consecutiveInvalidReads;
 
     static bool wasForcedOff = false;
     if (decision.forceLoadsOff) {
@@ -553,6 +628,7 @@ void loop() {
     heaterTick();
     dutyAdaptTick();
     auxHeaterTick();
+    publishCriticalStateIfChanged();
     statePublishTick();
     connectivityWatchdogTick();
 }

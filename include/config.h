@@ -41,9 +41,15 @@
 #define RADIATOR_FAN_ON_TEMP           30.0f
 #define RADIATOR_FAN_FAULT_TEMP        33.0f
 #define RADIATOR_CRITICAL_TEMP         35.0f
-#define RADIATOR_RECOVERY_TEMP         15.0f
+// Порог сброса аварии — тот же, что и порог включения вентилятора (RADIATOR_FAN_ON_TEMP):
+// остыл ниже точки, где вообще требуется охлаждение, — авария снята. Отдельного более низкого
+// порога нет специально, чтобы сброс не зависел от сезона/уличной температуры.
 #define RADIATOR_FAN_MIN_RUNTIME_MS    60000UL
 #define RADIATOR_SENSOR_POLL_PERIOD_MS 60000UL
+// Debounce отказа датчика D4: одиночный сбойный/отключённый опрос не эскалирует мгновенно до
+// OVERTEMP (частая причина ложных срабатываний из-за наводок на 1-Wire) — нужно столько подряд
+// неудачных опросов (при периоде 60с это RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT минут).
+#define RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT 3U
 
 // === Периоды опроса/публикации ===
 #define FAST_SENSOR_POLL_PERIOD_MS    5000UL
