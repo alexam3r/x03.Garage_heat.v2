@@ -87,6 +87,7 @@ static float targetAirTemp = DEFAULT_TARGET_AUX_AIR_TEMP;
 
 static unsigned long radiatorFanOnSince = 0;
 static unsigned int radiatorConsecutiveInvalidReads = 0;
+static unsigned long radiatorFanOffPendingSince = 0;
 
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
@@ -460,6 +461,7 @@ static void radiatorEscalationTick() {
     in.fanWasOn = radiatorFanState;
     in.previousAlarm = radiatorAlarmState;
     in.consecutiveInvalidReads = radiatorConsecutiveInvalidReads;
+    in.fanOffPendingSince = radiatorFanOffPendingSince;
 
     RadiatorDecision decision = evaluateRadiator(in);
 
@@ -471,6 +473,7 @@ static void radiatorEscalationTick() {
     radiatorAlarmState = decision.alarmState;
     radiatorFanOnSince = decision.fanOnSince;
     radiatorConsecutiveInvalidReads = decision.consecutiveInvalidReads;
+    radiatorFanOffPendingSince = decision.fanOffPendingSince;
 
     static bool wasForcedOff = false;
     if (decision.forceLoadsOff) {

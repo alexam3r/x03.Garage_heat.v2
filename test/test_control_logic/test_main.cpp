@@ -95,7 +95,8 @@ void test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false(void) {
 static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now,
                                         unsigned long fanOnSince, bool fanWasOn,
                                         RadiatorAlarmState prevAlarm,
-                                        unsigned int consecutiveInvalidReads = 0U) {
+                                        unsigned int consecutiveInvalidReads = 0U,
+                                        unsigned long fanOffPendingSince = 0UL) {
     RadiatorInput in;
     in.radiatorTemp = temp;
     in.sensorValid = valid;
@@ -104,6 +105,7 @@ static RadiatorInput makeRadiatorInput(float temp, bool valid, unsigned long now
     in.fanWasOn = fanWasOn;
     in.previousAlarm = prevAlarm;
     in.consecutiveInvalidReads = consecutiveInvalidReads;
+    in.fanOffPendingSince = fanOffPendingSince;
     return in;
 }
 
@@ -124,11 +126,50 @@ void test_evaluateRadiator_crosses_fan_on_threshold_records_fanOnSince(void) {
     TEST_ASSERT_FALSE(out.forceLoadsOff);
 }
 
-void test_evaluateRadiator_cools_below_threshold_resets_fanOnSince(void) {
-    RadiatorInput in = makeRadiatorInput(29.0f, true, 110000UL, 100000UL, true, RadiatorAlarmState::NORMAL);
+void test_evaluateRadiator_below_threshold_within_off_delay_keeps_fan_on(void) {
+    // Темп только что упала ниже 30°C (fanOffPendingSince ещё не установлен) — вентилятор не
+    // должен выключаться мгновенно, только после RADIATOR_FAN_OFF_DELAY_MS непрерывно ниже порога.
+    RadiatorInput in = makeRadiatorInput(29.0f, true, 110000UL, 100000UL, true, RadiatorAlarmState::NORMAL, 0U, 0UL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_TRUE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(100000UL, out.fanOnSince); // fanOnSince не сбрасывается, пока вентилятор ещё работает
+    TEST_ASSERT_EQUAL_UINT32(110000UL, out.fanOffPendingSince); // таймер выключения запущен
+}
+
+void test_evaluateRadiator_below_threshold_after_off_delay_turns_fan_off(void) {
+    // fanOffPendingSince уже был установлен в 110000, сейчас 170000 => 60с непрерывно ниже порога.
+    RadiatorInput in = makeRadiatorInput(29.0f, true, 170000UL, 100000UL, true, RadiatorAlarmState::NORMAL, 0U, 110000UL);
     RadiatorDecision out = evaluateRadiator(in);
     TEST_ASSERT_FALSE(out.fanOn);
     TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOnSince);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOffPendingSince);
+}
+
+void test_evaluateRadiator_below_threshold_before_off_delay_elapsed_keeps_fan_on(void) {
+    // Только 30с из требуемых 60с — вентилятор остаётся включён.
+    RadiatorInput in = makeRadiatorInput(29.0f, true, 140000UL, 100000UL, true, RadiatorAlarmState::NORMAL, 0U, 110000UL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_TRUE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(110000UL, out.fanOffPendingSince);
+}
+
+void test_evaluateRadiator_rising_above_threshold_cancels_pending_off(void) {
+    // Темп вернулась выше 30°C до истечения задержки выключения — таймер выключения отменяется,
+    // вентилятор продолжает работать без перезапуска fanOnSince.
+    RadiatorInput in = makeRadiatorInput(31.0f, true, 130000UL, 100000UL, true, RadiatorAlarmState::NORMAL, 0U, 110000UL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_TRUE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(100000UL, out.fanOnSince);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOffPendingSince);
+}
+
+void test_evaluateRadiator_fan_already_off_below_threshold_stays_off(void) {
+    // Вентилятор уже не работал (fanWasOn=false) — задержка не нужна, он и так выключен.
+    RadiatorInput in = makeRadiatorInput(20.0f, true, 100000UL, 0UL, false, RadiatorAlarmState::NORMAL);
+    RadiatorDecision out = evaluateRadiator(in);
+    TEST_ASSERT_FALSE(out.fanOn);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOnSince);
+    TEST_ASSERT_EQUAL_UINT32(0UL, out.fanOffPendingSince);
 }
 
 void test_evaluateRadiator_fan_fault_after_min_runtime(void) {
@@ -261,7 +302,11 @@ int main(int argc, char **argv) {
     RUN_TEST(test_shouldAuxHeaterTurnOff_at_upper_hysteresis_returns_false);
     RUN_TEST(test_evaluateRadiator_cold_normal_fan_off);
     RUN_TEST(test_evaluateRadiator_crosses_fan_on_threshold_records_fanOnSince);
-    RUN_TEST(test_evaluateRadiator_cools_below_threshold_resets_fanOnSince);
+    RUN_TEST(test_evaluateRadiator_below_threshold_within_off_delay_keeps_fan_on);
+    RUN_TEST(test_evaluateRadiator_below_threshold_after_off_delay_turns_fan_off);
+    RUN_TEST(test_evaluateRadiator_below_threshold_before_off_delay_elapsed_keeps_fan_on);
+    RUN_TEST(test_evaluateRadiator_rising_above_threshold_cancels_pending_off);
+    RUN_TEST(test_evaluateRadiator_fan_already_off_below_threshold_stays_off);
     RUN_TEST(test_evaluateRadiator_fan_fault_after_min_runtime);
     RUN_TEST(test_evaluateRadiator_no_fault_before_min_runtime);
     RUN_TEST(test_evaluateRadiator_critical_overtemp_forces_shutdown);

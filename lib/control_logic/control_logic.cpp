@@ -80,6 +80,7 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
         unsigned int count = in.consecutiveInvalidReads + 1U;
         out.fanOn = true;
         out.consecutiveInvalidReads = count;
+        out.fanOffPendingSince = 0UL; // вентилятор принудительно включён — ожидание выключения снято
         if (count >= RADIATOR_SENSOR_FAULT_DEBOUNCE_COUNT) {
             out.alarmState = RadiatorAlarmState::OVERTEMP;
             out.forceLoadsOff = true;
@@ -103,12 +104,38 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
 
     // fanOnSince фиксирует момент включения вентилятора охлаждения — нужен ниже для отсчёта
     // минимального времени работы перед проверкой отказа (вариант B, без тахометра).
-    bool fanShouldBeOn = in.radiatorTemp >= RADIATOR_FAN_ON_TEMP;
+    //
+    // Включение — по порогу 30°C без задержки. Выключение — только после того, как температура
+    // непрерывно держится ниже порога не менее RADIATOR_FAN_OFF_DELAY_MS (1 минута): защита от
+    // дребезга D8, если температура колеблется около 30°C. Если температура снова поднимается
+    // выше порога до истечения задержки — ожидание выключения отменяется, fanOnSince не сбрасывается
+    // (вентилятор ни разу фактически не выключался).
+    bool aboveFanOnThreshold = in.radiatorTemp >= RADIATOR_FAN_ON_TEMP;
+    bool fanShouldBeOn;
     unsigned long fanOnSince = in.fanOnSince;
-    if (fanShouldBeOn && !in.fanWasOn) {
-        fanOnSince = in.nowMillis;
-    } else if (!fanShouldBeOn) {
+    unsigned long fanOffPendingSince = in.fanOffPendingSince;
+
+    if (aboveFanOnThreshold) {
+        fanShouldBeOn = true;
+        fanOffPendingSince = 0UL;
+        if (!in.fanWasOn) {
+            fanOnSince = in.nowMillis;
+        }
+    } else if (in.fanWasOn) {
+        if (fanOffPendingSince == 0UL) {
+            fanOffPendingSince = in.nowMillis;
+        }
+        if ((in.nowMillis - fanOffPendingSince) >= RADIATOR_FAN_OFF_DELAY_MS) {
+            fanShouldBeOn = false;
+            fanOnSince = 0UL;
+            fanOffPendingSince = 0UL;
+        } else {
+            fanShouldBeOn = true;
+        }
+    } else {
+        fanShouldBeOn = false;
         fanOnSince = 0UL;
+        fanOffPendingSince = 0UL;
     }
 
     if (in.radiatorTemp >= RADIATOR_CRITICAL_TEMP) {
@@ -125,6 +152,7 @@ RadiatorDecision evaluateRadiator(const RadiatorInput& in) {
     out.alarmState = alarm;
     out.forceLoadsOff = (alarm != RadiatorAlarmState::NORMAL); // любая авария — обе нагрузки на радиаторе гасятся
     out.fanOnSince = fanOnSince;
+    out.fanOffPendingSince = fanOffPendingSince;
     out.consecutiveInvalidReads = 0U; // валидное чтение — счётчик сбойных опросов сбрасывается
     return out;
 }
