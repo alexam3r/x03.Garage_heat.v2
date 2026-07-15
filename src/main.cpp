@@ -213,6 +213,15 @@ static void fastSensorTick() {
     fastConversionPending = true;
 }
 
+static void radiatorEscalationTick();
+
+// Эскалация радиатора (radiatorEscalationTick) вызывается отсюда же, а не безусловно на каждой
+// итерации loop() — она построена на debounce-счётчике consecutiveInvalidReads, который должен
+// расти на один за каждый РЕАЛЬНЫЙ опрос датчика (RADIATOR_SENSOR_POLL_PERIOD_MS), а не на каждую
+// итерацию loop() (тысячи раз в секунду). При вызове на каждой итерации один-единственный сбойный
+// опрос "держится" в radiatorValid=false все 10с до следующего реального опроса и добирает порог
+// debounce (3) за миллисекунды вместо ~30с — ложный мгновенный OVERTEMP по одиночной наводке на
+// 1-Wire, который снимается уже на следующем реальном опросе.
 static void radiatorSensorTick() {
     unsigned long now = millis();
     if (now - lastRadiatorPoll < RADIATOR_SENSOR_POLL_PERIOD_MS) return;
@@ -226,6 +235,7 @@ static void radiatorSensorTick() {
             DBG_PRINTF("sensor RADIATOR: %s\n", radiatorValid ? "OK" : "DISCONNECTED");
             prevRadiatorValid = radiatorValid;
         }
+        radiatorEscalationTick();
     }
 
     sensorRadiator.requestTemperatures();
@@ -641,7 +651,6 @@ void loop() {
 
     fastSensorTick();
     radiatorSensorTick();
-    radiatorEscalationTick();
     heaterTick();
     dutyAdaptTick();
     auxHeaterTick();
