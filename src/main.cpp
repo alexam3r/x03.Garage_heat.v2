@@ -91,6 +91,7 @@ static unsigned int radiatorConsecutiveInvalidReads = 0;
 static WiFiClient wifiClient;
 static PubSubClient mqttClient(wifiClient);
 static unsigned long lastMqttReconnectAttempt = 0;
+static unsigned long lastWifiReconnectAttempt = 0;
 
 static unsigned long lastStatePublish = 0;
 static unsigned long lastFullyConnectedMillis = 0;
@@ -143,6 +144,21 @@ static void connectWiFi() {
     DBG_PRINTF("WiFi: connecting to \"%s\"\n", WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+}
+
+// Ядро ESP8266 Arduino НЕ переподключает WiFi само по себе после разрыва — без этого тика
+// станция просто оставалась бы отключена до срабатывания 5-минутного watchdog (CLAUDE.md §3.5),
+// который лишь перезагружает устройство целиком. Здесь — активная попытка восстановить связь тем
+// же способом, что и на старте (connectWiFi()), периодически, пока соединения нет.
+static void wifiReconnectTick() {
+    if (WiFi.status() == WL_CONNECTED) return;
+
+    unsigned long now = millis();
+    if (now - lastWifiReconnectAttempt < WIFI_RECONNECT_PERIOD_MS) return;
+    lastWifiReconnectAttempt = now;
+
+    DBG_PRINTLN("WiFi: not connected, retrying");
+    connectWiFi();
 }
 
 static void fastSensorTick() {
@@ -619,6 +635,7 @@ void setup() {
 }
 
 void loop() {
+    wifiReconnectTick();
     mqttReconnectTick();
     mqttClient.loop();
 

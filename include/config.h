@@ -56,6 +56,10 @@
 #define DUTY_ADAPT_CHECK_PERIOD_MS    10000UL
 #define MQTT_STATE_PUBLISH_PERIOD_MS  60000UL   // период полной перепубликации всех .../state (CLAUDE.md §4)
 #define MQTT_RECONNECT_PERIOD_MS      5000UL
+// Дольше, чем MQTT_RECONNECT_PERIOD_MS: WPA2-handshake+DHCP обычно занимают несколько секунд —
+// частый повторный WiFi.begin() посреди уже идущей попытки подключения мешает ей завершиться,
+// а не ускоряет реконнект.
+#define WIFI_RECONNECT_PERIOD_MS      15000UL
 
 // === Watchdog связи (WiFi+MQTT), CLAUDE.md §3.5 ===
 #define WATCHDOG_TIMEOUT_MS           300000UL   // 5 минут
